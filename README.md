@@ -1,3 +1,5 @@
+# EE 249 Final Project
+
 ## Wiring
 
 | Index | Board Pin | STM32 Pin (L) | STM32 Pin (R) | Description                                      |
