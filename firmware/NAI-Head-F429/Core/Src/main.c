@@ -20,8 +20,6 @@
 #include "main.h"
 #include "lwip.h"
 
-#include "lwip/udp.h"
-
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
@@ -44,129 +42,14 @@
 
 /* Private variables ---------------------------------------------------------*/
 SPI_HandleTypeDef hspi1;
+SPI_HandleTypeDef hspi2;
+
+TIM_HandleTypeDef htim1;
+TIM_HandleTypeDef htim4;
 
 UART_HandleTypeDef huart3;
 
 /* USER CODE BEGIN PV */
-
-void UDP_receive_handler(void *arg, struct udp_pcb *udp_control, struct pbuf *packet, const ip_addr_t *addr, u16_t port) {
-  struct pbuf *tx_buf;
-
-  // Get the IP of the Client
-//  char *remote_ip = ipaddr_ntoa(addr);
-
-  char buf[100];
-
-  int len = sprintf(buf,"Hello %s From UDP SERVER\n", (char*)packet->payload);
-
-  // allocate pbuf from RAM
-  tx_buf = pbuf_alloc(PBUF_TRANSPORT, len, PBUF_RAM);
-
-  // copy the data into the buffer
-  pbuf_take(tx_buf, buf, len);
-
-  // Connect to the remote client
-  udp_connect(udp_control, addr, port);
-
-  // Send a Reply to the Client
-  udp_send(udp_control, tx_buf);
-
-  // free the UDP connection, so we can accept new clients
-  udp_disconnect(udp_control);
-
-  // Free the buffers
-  pbuf_free(tx_buf);
-  pbuf_free(packet);
-}
-
-void UDP_init_server() {
-   /* 1. Create a new UDP control block  */
-   struct udp_pcb *udp_control = udp_new();
-
-   /* 2. Bind the upcb to the local port */
-   ip_addr_t ip_addr;
-   u16_t port = 7000;
-   IP_ADDR4(&ip_addr, 10, 0, 64, 64);
-
-   err_t err = udp_bind(udp_control, &ip_addr, port);
-
-   /* 3. Set a receive callback for the upcb */
-   if(err == ERR_OK) {
-     udp_recv(udp_control, UDP_receive_handler, NULL);
-   }
-   else {
-     udp_remove(udp_control);
-   }
-}
-
-
-char buffer[128];
-uint32_t counter = 0;
-struct udp_pcb *upcb;
-
-void udp_client_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p, const ip_addr_t *addr, u16_t port)
-{
-  /* Copy the data from the pbuf */
-  strncpy (buffer, (char *)p->payload, p->len);
-
-  /*increment message count */
-  counter++;
-
-  /* Free receive pbuf */
-  pbuf_free(p);
-}
-
-void udpClient_connect(void)
-{
-  err_t err;
-
-  /* 1. Create a new UDP control block  */
-  upcb = udp_new();
-
-  /* Bind the block to module's IP and port */
-  ip_addr_t myIPaddr;
-  IP_ADDR4(&myIPaddr, 10, 0, 64, 64);
-  udp_bind(upcb, &myIPaddr, 8);
-
-
-  /* configure destination IP address and port */
-  ip_addr_t DestIPaddr;
-  IP_ADDR4(&DestIPaddr, 10, 0, 0, 10);
-  err= udp_connect(upcb, &DestIPaddr, 7000);
-
-  if (err == ERR_OK)
-  {
-    /* 2. Send message to server */
-    udpClient_send ();
-
-    /* 3. Set a receive callback for the upcb */
-    udp_recv(upcb, udp_client_receive_callback, NULL);
-  }
-}
-
-
-void udpClient_send(void)
-{
-  struct pbuf *txBuf;
-  char data[100];
-
-  int len = sprintf(data, "sending UDP client message %d", counter);
-
-  /* allocate pbuf from pool*/
-  txBuf = pbuf_alloc(PBUF_TRANSPORT, len, PBUF_RAM);
-
-  if (txBuf != NULL)
-  {
-    /* copy data to pbuf */
-    pbuf_take(txBuf, data, len);
-
-    /* send udp data */
-    udp_send(upcb, txBuf);
-
-    /* free pbuf */
-    pbuf_free(txBuf);
-  }
-}
 
 /* USER CODE END PV */
 
@@ -175,13 +58,16 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_USART3_UART_Init(void);
+static void MX_SPI2_Init(void);
+static void MX_TIM1_Init(void);
+static void MX_TIM4_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-extern struct netif gnetif;
+
 /* USER CODE END 0 */
 
 /**
@@ -217,11 +103,10 @@ int main(void)
   MX_LWIP_Init();
   MX_SPI1_Init();
   MX_USART3_UART_Init();
+  MX_SPI2_Init();
+  MX_TIM1_Init();
+  MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
-
-//  UDP_init_server();
-  udpClient_connect();
-
   APP_init();
   /* USER CODE END 2 */
 
@@ -229,16 +114,7 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-//    APP_main();
-//    char str[128];
-//    sprintf(str, "hello\n");
-//    HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
-
-    ethernetif_input(&gnetif);
-    sys_check_timeouts();
-
-    HAL_Delay(100);
-    udpClient_send();
+    APP_main();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -315,7 +191,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_4;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -327,6 +203,170 @@ static void MX_SPI1_Init(void)
   /* USER CODE BEGIN SPI1_Init 2 */
 
   /* USER CODE END SPI1_Init 2 */
+
+}
+
+/**
+  * @brief SPI2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_SPI2_Init(void)
+{
+
+  /* USER CODE BEGIN SPI2_Init 0 */
+
+  /* USER CODE END SPI2_Init 0 */
+
+  /* USER CODE BEGIN SPI2_Init 1 */
+
+  /* USER CODE END SPI2_Init 1 */
+  /* SPI2 parameter configuration*/
+  hspi2.Instance = SPI2;
+  hspi2.Init.Mode = SPI_MODE_MASTER;
+  hspi2.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi2.Init.DataSize = SPI_DATASIZE_8BIT;
+  hspi2.Init.CLKPolarity = SPI_POLARITY_LOW;
+  hspi2.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi2.Init.NSS = SPI_NSS_SOFT;
+  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+  hspi2.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  hspi2.Init.TIMode = SPI_TIMODE_DISABLE;
+  hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  hspi2.Init.CRCPolynomial = 10;
+  if (HAL_SPI_Init(&hspi2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN SPI2_Init 2 */
+
+  /* USER CODE END SPI2_Init 2 */
+
+}
+
+/**
+  * @brief TIM1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM1_Init(void)
+{
+
+  /* USER CODE BEGIN TIM1_Init 0 */
+
+  /* USER CODE END TIM1_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+  TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig = {0};
+
+  /* USER CODE BEGIN TIM1_Init 1 */
+
+  /* USER CODE END TIM1_Init 1 */
+  htim1.Instance = TIM1;
+  htim1.Init.Prescaler = 159;
+  htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim1.Init.Period = 19999;
+  htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim1.Init.RepetitionCounter = 0;
+  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_PWM_Init(&htim1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 1500;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
+  sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
+  if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sBreakDeadTimeConfig.OffStateRunMode = TIM_OSSR_DISABLE;
+  sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_DISABLE;
+  sBreakDeadTimeConfig.LockLevel = TIM_LOCKLEVEL_OFF;
+  sBreakDeadTimeConfig.DeadTime = 0;
+  sBreakDeadTimeConfig.BreakState = TIM_BREAK_DISABLE;
+  sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_HIGH;
+  sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
+  if (HAL_TIMEx_ConfigBreakDeadTime(&htim1, &sBreakDeadTimeConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM1_Init 2 */
+
+  /* USER CODE END TIM1_Init 2 */
+  HAL_TIM_MspPostInit(&htim1);
+
+}
+
+/**
+  * @brief TIM4 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM4_Init(void)
+{
+
+  /* USER CODE BEGIN TIM4_Init 0 */
+
+  /* USER CODE END TIM4_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+
+  /* USER CODE BEGIN TIM4_Init 1 */
+
+  /* USER CODE END TIM4_Init 1 */
+  htim4.Instance = TIM4;
+  htim4.Init.Prescaler = 0;
+  htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim4.Init.Period = 65535;
+  htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_PWM_Init(&htim4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim4, &sConfigOC, TIM_CHANNEL_3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_ConfigChannel(&htim4, &sConfigOC, TIM_CHANNEL_4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM4_Init 2 */
+
+  /* USER CODE END TIM4_Init 2 */
+  HAL_TIM_MspPostInit(&htim4);
 
 }
 
@@ -377,6 +417,7 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOE_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOG_CLK_ENABLE();

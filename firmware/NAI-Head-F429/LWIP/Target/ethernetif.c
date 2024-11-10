@@ -199,6 +199,7 @@ static void low_level_init(struct netif *netif)
   #endif /* LWIP_ARP */
 
 /* USER CODE BEGIN PHY_PRE_CONFIG */
+    netif->flags |= NETIF_FLAG_IGMP;
 
 /* USER CODE END PHY_PRE_CONFIG */
   /* Set PHY IO functions */
