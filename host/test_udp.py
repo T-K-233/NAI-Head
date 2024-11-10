@@ -1,7 +1,8 @@
 import socket
 
 
-ADDR = "224.1.1.1"
+# ADDR = "224.0.0.3"
+ADDR = "10.0.64.64"
 PORT = 7000
 
 MULTICAST_TTL = 2

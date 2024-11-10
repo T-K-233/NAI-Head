@@ -9,6 +9,7 @@
 
 // some import hierarchy bugs, these two can only be placed in app.c
 #include "lwip.h"
+#include "igmp.h"
 #include "udp.h"
 
 
@@ -100,7 +101,7 @@ void UDP_transmit() {
   struct pbuf *txBuf;
   char data[100];
 
-  int len = sprintf(data, "sending UDP client message %d", counter);
+  int len = sprintf(data, "sending UDP client message %lu", counter);
 
   /* allocate pbuf from pool*/
   txBuf = pbuf_alloc(PBUF_TRANSPORT, len, PBUF_RAM);
@@ -147,93 +148,96 @@ void UDP_init_transmit(void) {
 
 
 
-void recCallBack(void *arg, struct udp_pcb *pcb, struct pbuf *p,
-                const ip_addr_t *addr, u16_t port)
-{
-    if (p != NULL) {
-        // Copy received data to buffer
-        char buffer[128];
-        memcpy(buffer, p->payload, p->len < sizeof(buffer) ? p->len : sizeof(buffer));
-        
-        // Debug print
-        char str[128];
-        sprintf(str, "Received Multicast: %s\n", buffer);
-        HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
-        
-        // Free the packet buffer
-        pbuf_free(p);
-    }
+void UDP_multicast_receive_callback(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t *addr, u16_t port) {
+  if (p != NULL) {
+    // Copy received data to buffer
+    char buffer[128];
+    memcpy(buffer, p->payload, p->len < sizeof(buffer) ? p->len : sizeof(buffer));
+
+    // Debug print
+    char str[128];
+    sprintf(str, "Received Multicast: %s\n", buffer);
+    HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
+
+    // Free the packet buffer
+    pbuf_free(p);
+  }
 }
 
-static void UDP_Multicast_init()
-{
-    struct ip4_addr ipgroup, localIP;
-    static struct udp_pcb *g_udppcb = NULL; // Make static to prevent deallocation
-    err_t err;
+void UDP_Multicast_init() {
+  static struct udp_pcb *g_udppcb = NULL; // Make static to prevent deallocation
+  err_t err;
+  char str[128];
+
+
+  // allow filter to receive any multicast packet
+  ETH_MACFilterConfigTypeDef filterConfig = {0};
+  filterConfig.PromiscuousMode = ENABLE;
+  filterConfig.PassAllMulticast = ENABLE;
+
+  if (HAL_ETH_SetMACFilterConfig(&heth, &filterConfig) != HAL_OK) {
     char str[128];
-    
-    // Clean up any existing PCB
-    if (g_udppcb != NULL) {
-        udp_remove(g_udppcb);
-        g_udppcb = NULL;
-    }
-    
-    IP4_ADDR(&ipgroup, 224, 1, 1, 1);
-    IP4_ADDR(&localIP, 10, 0, 64, 64);
-    
-    // Create new UDP PCB
-    g_udppcb = udp_new();
-    if (g_udppcb == NULL) {
-        sprintf(str, "Failed to create UDP PCB\n");
-        HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
-        return;
-    }
-    
-    // Bind to ANY address and specific port
-    err = udp_bind(g_udppcb, IP_ADDR_ANY, 7000);
-    if (err != ERR_OK) {
-        sprintf(str, "Failed to bind UDP: %d\n", err);
-        HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
-        udp_remove(g_udppcb);
-        return;
-    }
-    
-    // Join multicast group
-    err = igmp_joingroup(&localIP, &ipgroup);
-    if (err != ERR_OK) {
-        sprintf(str, "Failed to join multicast group: %d\n", err);
-        HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
-        udp_remove(g_udppcb);
-        return;
-    }
-    
-    // Set receive callback
-    udp_recv(g_udppcb, recCallBack, NULL);
-    
-    sprintf(str, "Multicast initialized successfully\n");
+    sprintf(str, "Failed to set MAC filter\n");
     HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
+  }
+
+  // set IP address
+  struct ip4_addr multicast_ip;    // multicast group ip
+  struct ip4_addr device_ip;       // this device ip
+  u16_t port = 7000;
+
+  IP4_ADDR(&multicast_ip, 224, 0, 0, 3);
+  IP4_ADDR(&device_ip, 10, 0, 64, 64);
+
+  // Clean up any existing PCB
+  if (g_udppcb != NULL) {
+    udp_remove(g_udppcb);
+    g_udppcb = NULL;
+  }
+
+
+  // Create new UDP PCB
+  g_udppcb = udp_new();
+  if (g_udppcb == NULL) {
+    sprintf(str, "Failed to create UDP PCB\n");
+    HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
+    return;
+  }
+
+  // Receive from any address (i.e. "0.0.0.0")
+  err = udp_bind(g_udppcb, IP_ADDR_ANY, port);
+  if (err != ERR_OK) {
+    sprintf(str, "Failed to bind UDP: %d\n", err);
+    HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
+    udp_remove(g_udppcb);
+    return;
+  }
+
+  // Join multicast group
+  err = igmp_joingroup(&device_ip, &multicast_ip);
+  if (err != ERR_OK) {
+    sprintf(str, "Failed to join multicast group: %d\n", err);
+    HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
+    udp_remove(g_udppcb);
+    return;
+  }
+
+  // Set receive callback
+  udp_recv(g_udppcb, UDP_multicast_receive_callback, NULL);
+
+  sprintf(str, "Multicast initialized successfully\n");
+  HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
 }
 
 
 void APP_init() {
-    ETH_MACFilterConfigTypeDef filterConfig = {0};
-    filterConfig.PromiscuousMode = ENABLE;
-    filterConfig.PassAllMulticast = ENABLE;
-    
-    if (HAL_ETH_SetMACFilterConfig(&heth, &filterConfig) != HAL_OK) {
-        char str[128];
-        sprintf(str, "Failed to set MAC filter\n");
-        HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
-    }
 
-    igmp_init();
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
 
-    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
-    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
-    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
-
-    HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_3);
-    HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_4);
+  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_3);
+  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_4);
 
 //  GC9A01A_init(&tft1, &hspi1,
 //    TFT1_CS_GPIO, TFT1_CS_PIN,
@@ -252,7 +256,7 @@ void APP_init() {
 
 //  UDP_init_receive();
 //  UDP_init_transmit();
-    UDP_Multicast_init();
+  UDP_Multicast_init();
 }
 
 void APP_main() {
@@ -268,7 +272,7 @@ void APP_main() {
   //    HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
 
   ethernetif_input(&gnetif);
-  igmp_tmr();
+//  igmp_tmr();
   sys_check_timeouts();
 
 //      UDP_transmit();
