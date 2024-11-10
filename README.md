@@ -36,3 +36,13 @@
   - Output Compare Preload: Enable
   - Fast Mode: Disable
   - CH Polarity: High
+ 
+## Clock Tree Settings
+
+SPI1 and TIM1, TIM8 are under the high speed APB2 bus; SPI2 and TIM2-7 are under APB1 bus. This information can be verified in Table 1 of [RM0090
+Reference manual](https://www.st.com/resource/en/reference_manual/dm00031020-stm32f405-415-stm32f407-417-stm32f427-437-and-stm32f429-439-advanced-arm-based-32-bit-mcus-stmicroelectronics.pdf)
+
+APB1 bus is configured to have 40 MHz clock (PCLK1 = 40 MHz, 45 MHz max); APB2 bus is configured to have 80 MHz clock (PCLK2 = 80MHz, 90 MHz max).
+
+We need to configure the prescaler of each peripheral accordingly.
+
