@@ -12,3 +12,27 @@
 |     6 | DC        | PA8           | PB1           | Data / Command select, low: command; high: data  |
 |     7 | CS        | PB6           | PA11          | SPI chip select, active low                      |
 |     8 | BLK       | PC7           | PB12          | Backlight enable, default pull-up to 3V3         |
+
+## Peripheral Allocation
+
+### SPI
+
+- Frame Format: Motorola
+- Data Size: 8 bits
+- First Bit: MSB First
+- Baud Rate: 20 Mbps
+- Clock Polarity: Low
+- Clock Phase: 1st Edge
+- NSS Signal: Software Controlled
+
+### Timer
+
+- Prescaler: 79
+- Counter Mode: Up
+- Counter Period: 19999
+- PWM Generation
+  - PWM Mode: Mode 1
+  - Pulse: 1500
+  - Output Compare Preload: Enable
+  - Fast Mode: Disable
+  - CH Polarity: High
