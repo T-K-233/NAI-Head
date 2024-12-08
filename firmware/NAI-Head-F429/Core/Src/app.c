@@ -45,7 +45,7 @@ GC9A01A tft2;
  * state[7]: EyeOpenLeft
  * state[8]: EyeOpenRight
  */
-float state[N_STATES];
+float states[N_STATES];
 
 
 void set_left_eye_openness(float val) {
@@ -63,38 +63,16 @@ void set_right_eye_openness(float val) {
 }
 
 
-void UDP_receive_handler(void *arg, struct udp_pcb *udp_control, struct pbuf *packet, const ip_addr_t *addr, u16_t port) {
-  struct pbuf *tx_buf;
-
-  // Get the IP of the Client
-//  char *remote_ip = ipaddr_ntoa(addr);
-
-  char buf[100];
-
-  int len = sprintf(buf,"Hello %s From UDP SERVER\n", (char*)packet->payload);
-
-  // allocate pbuf from RAM
-  tx_buf = pbuf_alloc(PBUF_TRANSPORT, len, PBUF_RAM);
-
-  // copy the data into the buffer
-  pbuf_take(tx_buf, buf, len);
-
-  // Connect to the remote client
-//  udp_connect(udp_control, addr, port);
-
-  // Send a Reply to the Client
-//  udp_send(udp_control, tx_buf);
-
-  // free the UDP connection, so we can accept new clients
-//  udp_disconnect(udp_control);
-
-  // Free the buffers
-  pbuf_free(tx_buf);
-  pbuf_free(packet);
+void UDP_receive_handler(void *arg, struct udp_pcb *udp_control, struct pbuf *rx_packet, const ip_addr_t *addr, u16_t port) {
+  for (size_t i=0; i<N_STATES; i+=1) {
+    states[i] = ((float *)rx_packet->payload)[i];
+  }
 
   char str[128];
-  sprintf(str, "Receive UDP\n");
+  sprintf(str, "Receive UDP of len %d\n", rx_packet->len);
   HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
+
+  pbuf_free(rx_packet);
 
 }
 
@@ -286,12 +264,12 @@ void APP_init() {
     NULL, 0
   );
 
-  for (size_t i=0; i<tft1.width; i+=1) {
-    for (size_t j=0; j<tft1.height; j+=1) {
-      GC9A01A_draw_pixel(&tft1, j, i, 0xFFFF);
-      GC9A01A_draw_pixel(&tft2, j, i, 0xFFFF);
-    }
-  }
+//  for (size_t i=0; i<tft1.width; i+=1) {
+//    for (size_t j=0; j<tft1.height; j+=1) {
+//      GC9A01A_draw_pixel(&tft1, j, i, 0xFFFF);
+//      GC9A01A_draw_pixel(&tft2, j, i, 0xFFFF);
+//    }
+//  }
 
 
   UDP_init_receive();
@@ -301,7 +279,7 @@ void APP_init() {
 
 void APP_main() {
 
-//  char str[128];
+  char str[128];
 //  sprintf(str, "hello \n");
 //  HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
 
@@ -313,19 +291,25 @@ void APP_main() {
 
 
 
-  int16_t eye_l_x_pixels = (int16_t)(-state[3] * EYE_MOVEMENT_X_SCALE);
-  int16_t eye_l_y_pixels = (int16_t)(-state[4] * EYE_MOVEMENT_Y_SCALE);
+  int16_t eye_l_x_pixels = (int16_t)(-states[3] * EYE_MOVEMENT_X_SCALE);
+  int16_t eye_l_y_pixels = (int16_t)(-states[4] * EYE_MOVEMENT_Y_SCALE);
 
-  int16_t eye_r_x_pixels = (int16_t)(-state[5] * EYE_MOVEMENT_X_SCALE);
-  int16_t eye_r_y_pixels = (int16_t)(-state[6] * EYE_MOVEMENT_Y_SCALE);
+  int16_t eye_r_x_pixels = (int16_t)(-states[5] * EYE_MOVEMENT_X_SCALE);
+  int16_t eye_r_y_pixels = (int16_t)(-states[6] * EYE_MOVEMENT_Y_SCALE);
 
-  set_left_eye_openness(state[7]);
-  set_right_eye_openness(state[8]);
+//  set_left_eye_openness(states[7]);
+//  set_right_eye_openness(states[8]);
+//
+//  // left eye
+//  GC9A01A_draw_pixels(&tft1, eye_l_x_pixels, eye_l_y_pixels, (uint16_t *)image_data, 240, 240);
+//  // right eye
+//  GC9A01A_draw_pixels(&tft2, eye_r_x_pixels, eye_r_y_pixels, (uint16_t *)image_data, 240, 240);
 
-  // left eye
-  GC9A01A_draw_pixels(&tft1, eye_l_x_pixels, eye_l_y_pixels, (uint16_t *)image_data, 240, 240);
-  // right eye
-  GC9A01A_draw_pixels(&tft2, eye_r_x_pixels, eye_r_y_pixels, (uint16_t *)image_data, 240, 240);
+  sprintf(str, "states: %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f\n",
+      states[0], states[1], states[2],
+      states[3], states[4], states[5], states[6],
+      states[7], states[8]);
+  HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
 
-
+  HAL_Delay(100);
 }
