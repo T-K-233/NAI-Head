@@ -49,17 +49,17 @@ float states[N_STATES];
 
 
 void set_left_eye_openness(float val) {
-  val = val < 1 ? val : 1;
-  val = val > 0 ? val : 0;
+  val = val < 1.f ? val : 1.f;
+  val = val > 0.f ? val : 0.f;
 
-  __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1, EYELID_L_FULLCLOSE * (1 - val) + EYELID_L_FULLOPEN * val);
+  __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_3, EYELID_L_FULLCLOSE * (1 - val) + EYELID_L_FULLOPEN * val);
 }
 
 void set_right_eye_openness(float val) {
-  val = val < 1 ? val : 1;
-  val = val > 0 ? val : 0;
+  val = val < 1.f ? val : 1.f;
+  val = val > 0.f ? val : 0.f;
 
-  __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_2, EYELID_R_FULLCLOSE * (1 - val) + EYELID_R_FULLOPEN * val);
+  __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_4, EYELID_R_FULLCLOSE * (1 - val) + EYELID_R_FULLOPEN * val);
 }
 
 
@@ -297,19 +297,19 @@ void APP_main() {
   int16_t eye_r_x_pixels = (int16_t)(-states[5] * EYE_MOVEMENT_X_SCALE);
   int16_t eye_r_y_pixels = (int16_t)(-states[6] * EYE_MOVEMENT_Y_SCALE);
 
-//  set_left_eye_openness(states[7]);
-//  set_right_eye_openness(states[8]);
+  set_left_eye_openness(states[7]);
+  set_right_eye_openness(states[8]);
+
+  // left eye
+  GC9A01A_draw_pixels(&tft1, eye_l_x_pixels, eye_l_y_pixels, (uint16_t *)image_data, 240, 240);
+  // right eye
+  GC9A01A_draw_pixels(&tft2, eye_r_x_pixels, eye_r_y_pixels, (uint16_t *)image_data, 240, 240);
+
+//  sprintf(str, "states: %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f\n",
+//      states[0], states[1], states[2],
+//      states[3], states[4], states[5], states[6],
+//      states[7], states[8]);
+//  HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
 //
-//  // left eye
-//  GC9A01A_draw_pixels(&tft1, eye_l_x_pixels, eye_l_y_pixels, (uint16_t *)image_data, 240, 240);
-//  // right eye
-//  GC9A01A_draw_pixels(&tft2, eye_r_x_pixels, eye_r_y_pixels, (uint16_t *)image_data, 240, 240);
-
-  sprintf(str, "states: %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f\n",
-      states[0], states[1], states[2],
-      states[3], states[4], states[5], states[6],
-      states[7], states[8]);
-  HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
-
-  HAL_Delay(100);
+//  HAL_Delay(100);
 }

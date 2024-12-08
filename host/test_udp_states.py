@@ -8,9 +8,14 @@ PORT = 7000
 
 MULTICAST_TTL = 2
 
-N_STATES = 8
+N_STATES = 9
 
-states = np.ones(N_STATES, dtype=np.float32) * 0.1
+states = np.zeros(N_STATES, dtype=np.float32)
+
+states[5] = -1
+
+states[7] = 1.0
+states[8] = 1.0
 
 # open UDP socket
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
