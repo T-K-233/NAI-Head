@@ -9,18 +9,58 @@
 
 // some import hierarchy bugs, these two can only be placed in app.c
 #include "lwip.h"
+#include "lwip/igmp.h"
 #include "udp.h"
 
 
 extern ETH_HandleTypeDef heth;
-extern SPI_HandleTypeDef hspi1;
-extern SPI_HandleTypeDef hspi2;
+extern SPI_HandleTypeDef hspi4;
+extern SPI_HandleTypeDef hspi5;
 extern TIM_HandleTypeDef htim1;
 extern TIM_HandleTypeDef htim4;
 extern UART_HandleTypeDef huart3;
 
-
 extern struct netif gnetif;
+
+
+// load the weight data block from the model.bin file
+INCLUDE_FILE(".rodata", "./img.bin", image);
+extern uint8_t image_data[];
+extern size_t image_start[];
+extern size_t image_end[];
+
+
+GC9A01A tft1;
+GC9A01A tft2;
+
+
+/**
+ * state[0]: HeadX
+ * state[1]: HeadY
+ * state[2]: HeadZ
+ * state[3]: EyeLeftX
+ * state[4]: EyeLeftY
+ * state[5]: EyeRightX
+ * state[6]: EyeRightY
+ * state[7]: EyeOpenLeft
+ * state[8]: EyeOpenRight
+ */
+float state[N_STATES];
+
+
+void set_left_eye_openness(float val) {
+  val = val < 1 ? val : 1;
+  val = val > 0 ? val : 0;
+
+  __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1, EYELID_L_FULLCLOSE * (1 - val) + EYELID_L_FULLOPEN * val);
+}
+
+void set_right_eye_openness(float val) {
+  val = val < 1 ? val : 1;
+  val = val > 0 ? val : 0;
+
+  __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_2, EYELID_R_FULLCLOSE * (1 - val) + EYELID_R_FULLOPEN * val);
+}
 
 
 void UDP_receive_handler(void *arg, struct udp_pcb *udp_control, struct pbuf *packet, const ip_addr_t *addr, u16_t port) {
@@ -83,10 +123,9 @@ char buffer[128];
 uint32_t counter = 0;
 struct udp_pcb *upcb;
 
-void UDP_client_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p, const ip_addr_t *addr, u16_t port)
-{
+void UDP_client_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p, const ip_addr_t *addr, u16_t port) {
   /* Copy the data from the pbuf */
-  strncpy (buffer, (char *)p->payload, p->len);
+  strncpy(buffer, (char *)p->payload, p->len);
 
   /*increment message count */
   counter += 1;
@@ -100,7 +139,7 @@ void UDP_transmit() {
   struct pbuf *txBuf;
   char data[100];
 
-  int len = sprintf(data, "sending UDP client message %d", counter);
+  int len = sprintf(data, "sending UDP client message %lu", counter);
 
   /* allocate pbuf from pool*/
   txBuf = pbuf_alloc(PBUF_TRANSPORT, len, PBUF_RAM);
@@ -147,146 +186,146 @@ void UDP_init_transmit(void) {
 
 
 
-void recCallBack(void *arg, struct udp_pcb *pcb, struct pbuf *p,
-                const ip_addr_t *addr, u16_t port)
-{
-    if (p != NULL) {
-        // Copy received data to buffer
-        char buffer[128];
-        memcpy(buffer, p->payload, p->len < sizeof(buffer) ? p->len : sizeof(buffer));
-        
-        // Debug print
-        char str[128];
-        sprintf(str, "Received Multicast: %s\n", buffer);
-        HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
-        
-        // Free the packet buffer
-        pbuf_free(p);
-    }
+void recCallBack(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t *addr, u16_t port) {
+  if (p != NULL) {
+    // Copy received data to buffer
+    char buffer[128];
+    memcpy(buffer, p->payload, p->len < sizeof(buffer) ? p->len : sizeof(buffer));
+
+    // Debug print
+    char str[256];
+    sprintf(str, "Received Multicast: %s\n", buffer);
+    HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
+
+    // Free the packet buffer
+    pbuf_free(p);
+  }
 }
 
-static void UDP_Multicast_init()
-{
-    struct ip4_addr ipgroup, localIP;
-    static struct udp_pcb *g_udppcb = NULL; // Make static to prevent deallocation
-    err_t err;
-    char str[128];
-    
-    // Clean up any existing PCB
-    if (g_udppcb != NULL) {
-        udp_remove(g_udppcb);
-        g_udppcb = NULL;
-    }
-    
-    IP4_ADDR(&ipgroup, 224, 1, 1, 1);
-    IP4_ADDR(&localIP, 10, 0, 64, 64);
-    
-    // Create new UDP PCB
-    g_udppcb = udp_new();
-    if (g_udppcb == NULL) {
-        sprintf(str, "Failed to create UDP PCB\n");
-        HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
-        return;
-    }
-    
-    // Bind to ANY address and specific port
-    err = udp_bind(g_udppcb, IP_ADDR_ANY, 7000);
-    if (err != ERR_OK) {
-        sprintf(str, "Failed to bind UDP: %d\n", err);
-        HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
-        udp_remove(g_udppcb);
-        return;
-    }
-    
-    // Join multicast group
-    err = igmp_joingroup(&localIP, &ipgroup);
-    if (err != ERR_OK) {
-        sprintf(str, "Failed to join multicast group: %d\n", err);
-        HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
-        udp_remove(g_udppcb);
-        return;
-    }
-    
-    // Set receive callback
-    udp_recv(g_udppcb, recCallBack, NULL);
-    
-    sprintf(str, "Multicast initialized successfully\n");
+void UDP_multicast_init() {
+  struct ip4_addr ipgroup, localIP;
+  static struct udp_pcb *g_udppcb = NULL; // Make static to prevent deallocation
+  err_t err;
+  char str[128];
+
+  // Clean up any existing PCB
+  if (g_udppcb != NULL) {
+    udp_remove(g_udppcb);
+    g_udppcb = NULL;
+  }
+
+  IP4_ADDR(&ipgroup, 224, 1, 1, 1);
+  IP4_ADDR(&localIP, 10, 0, 64, 64);
+
+  // Create new UDP PCB
+  g_udppcb = udp_new();
+  if (g_udppcb == NULL) {
+    sprintf(str, "Failed to create UDP PCB\n");
     HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
+    return;
+  }
+
+  // Bind to ANY address and specific port
+  err = udp_bind(g_udppcb, IP_ADDR_ANY, 7000);
+  if (err != ERR_OK) {
+    sprintf(str, "Failed to bind UDP: %d\n", err);
+    HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
+    udp_remove(g_udppcb);
+    return;
+  }
+
+  // Join multicast group
+  err = igmp_joingroup(&localIP, &ipgroup);
+  if (err != ERR_OK) {
+    sprintf(str, "Failed to join multicast group: %d\n", err);
+    HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
+    udp_remove(g_udppcb);
+    return;
+  }
+
+  // Set receive callback
+  udp_recv(g_udppcb, recCallBack, NULL);
+
+  sprintf(str, "Multicast initialized successfully\n");
+  HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
 }
 
 
 void APP_init() {
-    ETH_MACFilterConfigTypeDef filterConfig = {0};
-    filterConfig.PromiscuousMode = ENABLE;
-    filterConfig.PassAllMulticast = ENABLE;
-    
-    if (HAL_ETH_SetMACFilterConfig(&heth, &filterConfig) != HAL_OK) {
-        char str[128];
-        sprintf(str, "Failed to set MAC filter\n");
-        HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
+  ETH_MACFilterConfigTypeDef filterConfig = {0};
+  filterConfig.PromiscuousMode = ENABLE;
+  filterConfig.PassAllMulticast = ENABLE;
+
+  if (HAL_ETH_SetMACFilterConfig(&heth, &filterConfig) != HAL_OK) {
+    char str[128];
+    sprintf(str, "Failed to set MAC filter\n");
+    HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
+  }
+
+  igmp_init();
+
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
+
+  HAL_TIM_Base_Start(&htim4);
+  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_3);
+  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_4);
+
+  GC9A01A_init(&tft1, &hspi4,
+    GPIO_SPI4_CS_GPIO_Port, GPIO_SPI4_CS_Pin,
+    GPIO_SPI4_DC_GPIO_Port, GPIO_SPI4_DC_Pin,
+    GPIO_LCD_BLK_GPIO_Port, GPIO_LCD_BLK_Pin,
+    GPIO_LCD_RESET_GPIO_Port, GPIO_LCD_RESET_Pin
+  );
+
+  GC9A01A_init(&tft2, &hspi5,
+    GPIO_SPI5_CS_GPIO_Port, GPIO_SPI5_CS_Pin,
+    GPIO_SPI5_DC_GPIO_Port, GPIO_SPI5_DC_Pin,
+    NULL, 0,
+    NULL, 0
+  );
+
+  for (size_t i=0; i<tft1.width; i+=1) {
+    for (size_t j=0; j<tft1.height; j+=1) {
+      GC9A01A_draw_pixel(&tft1, j, i, 0xFFFF);
+      GC9A01A_draw_pixel(&tft2, j, i, 0xFFFF);
     }
-
-    igmp_init();
-
-    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
-    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
-    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
-
-    HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_3);
-    HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_4);
-
-//  GC9A01A_init(&tft1, &hspi1,
-//    TFT1_CS_GPIO, TFT1_CS_PIN,
-//    TFT1_DC_GPIO, TFT1_DC_PIN,
-//    TFT1_BL_GPIO, TFT1_BL_PIN,
-//    TFT1_RST_GPIO, TFT1_RST_PIN
-//  );
-//
-//  GC9A01A_init(&tft2, &hspi2,
-//    TFT2_CS_GPIO, TFT2_CS_PIN,
-//    TFT2_DC_GPIO, TFT2_DC_PIN,
-//    TFT2_BL_GPIO, TFT2_BL_PIN,
-//    TFT2_RST_GPIO, TFT2_RST_PIN
-//  );
+  }
 
 
-//  UDP_init_receive();
+  UDP_init_receive();
 //  UDP_init_transmit();
-    UDP_Multicast_init();
+//  UDP_multicast_init();
 }
 
 void APP_main() {
-//
+
 //  char str[128];
 //  sprintf(str, "hello \n");
 //  HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
-//
-//  HAL_Delay(100);
-
-  //    char str[128];
-  //    sprintf(str, "hello\n");
-  //    HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
 
   ethernetif_input(&gnetif);
   igmp_tmr();
   sys_check_timeouts();
 
-//      UDP_transmit();
+//  UDP_transmit();
 
-//  set_left_eye_openness(state[0]);
-//  set_right_eye_openness(state[1]);
-//
-//  int16_t eye_l_x_pixels = (int16_t)(-state[2] * EYE_MOVEMENT_X_SCALE);
-//  int16_t eye_l_y_pixels = (int16_t)(-state[3] * EYE_MOVEMENT_Y_SCALE);
-//
-//  int16_t eye_r_x_pixels = (int16_t)(-state[4] * EYE_MOVEMENT_X_SCALE);
-//  int16_t eye_r_y_pixels = (int16_t)(-state[5] * EYE_MOVEMENT_Y_SCALE);
-//
-//  // left eye
-//  GC9A01A_draw_pixels(&tft1, eye_l_x_pixels, eye_l_y_pixels, (uint16_t *)image_data, 240, 240);
-//
-//  // right eye
-//  GC9A01A_draw_pixels(&tft2, eye_r_x_pixels, eye_r_y_pixels, (uint16_t *)image_data, 240, 240);
-//
-//  counter += 1;
+
+
+  int16_t eye_l_x_pixels = (int16_t)(-state[3] * EYE_MOVEMENT_X_SCALE);
+  int16_t eye_l_y_pixels = (int16_t)(-state[4] * EYE_MOVEMENT_Y_SCALE);
+
+  int16_t eye_r_x_pixels = (int16_t)(-state[5] * EYE_MOVEMENT_X_SCALE);
+  int16_t eye_r_y_pixels = (int16_t)(-state[6] * EYE_MOVEMENT_Y_SCALE);
+
+  set_left_eye_openness(state[7]);
+  set_right_eye_openness(state[8]);
+
+  // left eye
+  GC9A01A_draw_pixels(&tft1, eye_l_x_pixels, eye_l_y_pixels, (uint16_t *)image_data, 240, 240);
+  // right eye
+  GC9A01A_draw_pixels(&tft2, eye_r_x_pixels, eye_r_y_pixels, (uint16_t *)image_data, 240, 240);
+
+
 }

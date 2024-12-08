@@ -31,7 +31,6 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "app.h"
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
@@ -59,9 +58,21 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define GPIO_SPI5_CS_Pin GPIO_PIN_3
+#define GPIO_SPI5_CS_GPIO_Port GPIOE
+#define GPIO_SPI4_CS_Pin GPIO_PIN_4
+#define GPIO_SPI4_CS_GPIO_Port GPIOE
+#define GPIO_SPI4_DC_Pin GPIO_PIN_5
+#define GPIO_SPI4_DC_GPIO_Port GPIOE
+#define GPIO_SPI5_DC_Pin GPIO_PIN_8
+#define GPIO_SPI5_DC_GPIO_Port GPIOF
+#define GPIO_LCD_RESET_Pin GPIO_PIN_0
+#define GPIO_LCD_RESET_GPIO_Port GPIOG
+#define GPIO_LCD_BLK_Pin GPIO_PIN_1
+#define GPIO_LCD_BLK_GPIO_Port GPIOG
 
 /* USER CODE BEGIN Private defines */
-
+#include "app.h"
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus
