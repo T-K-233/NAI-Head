@@ -10,7 +10,8 @@ client.authenticate()
 
 client.set_parameters(
     {
-        InputParameter.EyeOpenLeft: 0.1
+        InputParameter.EyeOpenLeft: 0.1,
+        InputParameter.MouthOpen: 1,
     }
 )
 
