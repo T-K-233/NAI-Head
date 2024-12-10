@@ -46,3 +46,29 @@ APB1 bus is configured to have 40 MHz clock (PCLK1 = 40 MHz, 45 MHz max); APB2 b
 
 We need to configure the prescaler of each peripheral accordingly.
 
+
+## Communication Frame
+
+### UDP Frame
+
+| Idx | Name                | Byte Range | Type    |
+| --- | ------------------- | ---------- | ------- |
+| 0   | Head X              | 0:4        | float32 |
+| 1   | Head Y              | 4:8        | float32 |
+| 2   | Head Z              | 8:12       | float32 |
+| 3   | Eye Left X          | 12:16      | float32 |
+| 4   | Eye Left Y          | 16:20      | float32 |
+| 5   | Eye Right X         | 20:24      | float32 |
+| 6   | Eye Right Y         | 24:28      | float32 |
+| 7   | Eye Left Openness   | 28:32      | float32 |
+| 8   | Eye Right Openness  | 32:36      | float32 |
+
+
+
+
+## Protobuf issue in Windows
+
+
+```powershell
+$env:PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION = "python"
+```

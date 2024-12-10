@@ -1,26 +1,16 @@
-import time
-import math
-import json
 
-import numpy as np
-from websockets.sync.client import connect
 
-PLUGIN_NAME = "Sample Plugin"
-PLUGIN_DEVELOPER = "-T.K.-"
 
-message_template = {
-        "apiName": "VTubeStudioPublicAPI",
-        "apiVersion": "1.0",
-        # "requestID": "",
-        "messageType": "",
-        "data": {
-            "pluginName": PLUGIN_NAME,
-            "pluginDeveloper": PLUGIN_DEVELOPER
-        }
-    }
+class MessageType:
+    AuthenticationRequest = "AuthenticationRequest"
+    AuthenticationTokenRequest = "AuthenticationTokenRequest"
+    InjectParameterDataRequest = "InjectParameterDataRequest"
 
-class InputParameters:
+
+class InputParameter:
     """
+    A list of supported input parameters for VTubeStudio.
+    
     see https://github.com/DenchiSoft/VTubeStudio/wiki/VTS-Model-Settings#supported-input-parameters-face-tracking-etc
     """
     FacePositionX   = "FacePositionX"   # horizontal position of face
@@ -57,40 +47,3 @@ class InputParameters:
     MouthX          = "MouthX"          # Mouth X position (shift mouth left/right)
     FaceAngry       = "FaceAngry"       # detects angry face (EXPERIMENTAL, not recommended)
     # hand-tracking parameters: https://github.com/DenchiSoft/VTubeStudio/wiki/Hand-Tracking
-
-class VTubeStudioAPI:
-    def __init__(self, url="ws://10.0.0.2:8001"):
-        self.websocket = connect(url)
-
-    def send(self, message: dict):
-        self.websocket.send(json.dumps(message))
-        response = json.loads(self.websocket.recv(timeout=0.1))
-        return response
-
-    def requestToken(self):
-        token_request = message_template.copy()
-        token_request["messageType"] = "AuthenticationTokenRequest"
-        response = self.send(token_request)
-        token = response["data"]["authenticationToken"]
-        with open("token.txt", "w") as file:
-            file.write(token)
-        return token
-
-    def authenticate(self):
-        # detect if token exists
-        try:
-            with open("token.txt", "r") as file:
-                token = file.read()
-        except FileNotFoundError:
-            token = None
-        
-        if not token:
-            self.requestToken()
-        
-        auth_request = message_template.copy()
-        auth_request["messageType"] = "AuthenticationRequest"
-        auth_request["data"]["authenticationToken"] = token
-        
-        response = self.send(auth_request)
-        print(response)
-

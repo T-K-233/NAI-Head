@@ -30,19 +30,20 @@ void GC9A01A_init(GC9A01A *tft,
   tft->rst_pin = rst_pin;
 
 
-  // digitalWrite(TFT_CS, HIGH); // Deselect
+  // deselect
   HAL_GPIO_WritePin(tft->cs_gpio, tft->cs_pin, GPIO_PIN_SET);
 
-  // digitalWrite(TFT_DC, HIGH); // Data mode
+  // enter data mode
   HAL_GPIO_WritePin(tft->dc_gpio, tft->dc_pin, GPIO_PIN_SET);
 
 
-  // digitalWrite(TFT_RST, LOW);
-  HAL_GPIO_WritePin(tft->rst_gpio, tft->rst_pin, GPIO_PIN_RESET);
-  HAL_Delay(100);
-  // digitalWrite(TFT_RST, HIGH);
-  HAL_GPIO_WritePin(tft->rst_gpio, tft->rst_pin, GPIO_PIN_SET);
-  HAL_Delay(100);
+  // reset the chip
+  if (tft->rst_gpio) {
+    HAL_GPIO_WritePin(tft->rst_gpio, tft->rst_pin, GPIO_PIN_RESET);
+    HAL_Delay(100);
+    HAL_GPIO_WritePin(tft->rst_gpio, tft->rst_pin, GPIO_PIN_SET);
+    HAL_Delay(100);
+  }
 
 
   uint8_t x, numArgs;
@@ -61,8 +62,10 @@ void GC9A01A_init(GC9A01A *tft,
       HAL_Delay(150);
   }
 
-  // Backlight on
-  HAL_GPIO_WritePin(tft->bl_gpio, tft->bl_pin, GPIO_PIN_SET);
+  // enable backlight
+  if (tft->bl_gpio) {
+    HAL_GPIO_WritePin(tft->bl_gpio, tft->bl_pin, GPIO_PIN_SET);
+  }
 }
 
 void GC9A01A_configure_param(GC9A01A *tft, uint8_t command, uint8_t *data, uint8_t n_data) {

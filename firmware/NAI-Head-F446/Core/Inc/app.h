@@ -33,39 +33,6 @@
 
 
 
-// Chip select
-#define TFT1_CS_GPIO   GPIOB
-#define TFT1_CS_PIN    GPIO_PIN_6
-
-// Data/command
-#define TFT1_DC_GPIO   GPIOA
-#define TFT1_DC_PIN    GPIO_PIN_8
-
-// Backlight control
-#define TFT1_BL_GPIO   GPIOC
-#define TFT1_BL_PIN    GPIO_PIN_7
-
-#define TFT1_RST_GPIO  GPIOA
-#define TFT1_RST_PIN   GPIO_PIN_9
-
-
-// Chip select
-#define TFT2_CS_GPIO   GPIOA
-#define TFT2_CS_PIN    GPIO_PIN_11
-
-// Data/command
-#define TFT2_DC_GPIO   GPIOB
-#define TFT2_DC_PIN    GPIO_PIN_1
-
-// Backlight control
-#define TFT2_BL_GPIO   GPIOB
-#define TFT2_BL_PIN    GPIO_PIN_12
-
-#define TFT2_RST_GPIO  GPIOB
-#define TFT2_RST_PIN   GPIO_PIN_2
-
-
-
 void APP_init();
 
 void APP_main();
