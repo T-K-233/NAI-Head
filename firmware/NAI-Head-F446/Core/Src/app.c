@@ -8,133 +8,144 @@
 #include "app.h"
 
 
-extern SPI_HandleTypeDef hspi1;
-extern SPI_HandleTypeDef hspi2;
+#define ADC_SAMPLES    128
+
+#define ADC_BASELINE    0
+
+
+extern ADC_HandleTypeDef hadc1;
+extern ADC_HandleTypeDef hadc2;
+extern DAC_HandleTypeDef hdac;
+extern TIM_HandleTypeDef htim2;
 extern TIM_HandleTypeDef htim3;
 extern UART_HandleTypeDef huart2;
 
-
-// load the weight data block from the model.bin file
-INCLUDE_FILE(".rodata", "./img.bin", image);
-extern uint8_t image_data[];
-extern size_t image_start[];
-extern size_t image_end[];
+uint16_t counter = 0;
+uint8_t value = 0;
 
 
-#define EYELID_L_FULLOPEN         1750
-#define EYELID_R_FULLOPEN         1250
-#define EYELID_L_FULLCLOSE        1280
-#define EYELID_R_FULLCLOSE        1720
+uint8_t completed = 0;
 
+uint16_t adc_data_buffer_1[ADC_SAMPLES];
+uint16_t adc_data_buffer_2[ADC_SAMPLES];
+int16_t data_1[ADC_SAMPLES];
+int16_t data_2[ADC_SAMPLES];
 
-#define EYE_MOVEMENT_X_SCALE      30.f
-#define EYE_MOVEMENT_Y_SCALE      30.f
-
-
-#define N_STATES    6
-
-
-/**
- * state[0]: EyeOpenLeft
- * state[1]: EyeOpenRight
- * state[2]: EyeLeftX
- * state[3]: EyeLeftY
- * state[4]: EyeRightX
- * state[5]: EyeRightY
- *
- */
-float state[N_STATES];
-
-
-
-uint8_t counter;
-
-
-GC9A01A tft1;
-GC9A01A tft2;
-
-
-void set_left_eye_openness(float val) {
-  val = val < 1 ? val : 1;
-  val = val > 0 ? val : 0;
-
-  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, EYELID_L_FULLCLOSE * (1 - val) + EYELID_L_FULLOPEN * val);
-}
-
-void set_right_eye_openness(float val) {
-  val = val < 1 ? val : 1;
-  val = val > 0 ? val : 0;
-
-  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, EYELID_R_FULLCLOSE * (1 - val) + EYELID_R_FULLOPEN * val);
-}
+float time_delay_avg = 0;
 
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
-  {
-//    char str[256];
-//    sprintf(str, "%f %f %f %f %f %f\n",
-//        state[0], state[1],
-//        state[2], state[3],
-//        state[4], state[5]
-//      );
-//    HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), 100);
-  }
-
-  HAL_UART_Receive_IT(&huart2, (uint8_t *)state, N_STATES * sizeof(float));
 }
+
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
+  completed = 1;
+}
+
 
 
 void APP_init() {
-  for (size_t i = 0; i < N_STATES; i += 1) {
-    state[i] = 0;
-  }
+  char str[128];
+  sprintf(str, "start.\n");
+  HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), 100);
 
-
-  HAL_UART_Receive_IT(&huart2, (uint8_t *)state, N_STATES * sizeof(float));
-
+  HAL_DAC_Start(&hdac, DAC_CHANNEL_1);
 
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
-  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
-
-  GC9A01A_init(&tft1, &hspi1,
-    TFT1_CS_GPIO, TFT1_CS_PIN,
-    TFT1_DC_GPIO, TFT1_DC_PIN,
-    TFT1_BL_GPIO, TFT1_BL_PIN,
-    TFT1_RST_GPIO, TFT1_RST_PIN
-  );
-
-  GC9A01A_init(&tft2, &hspi2,
-    TFT2_CS_GPIO, TFT2_CS_PIN,
-    TFT2_DC_GPIO, TFT2_DC_PIN,
-    TFT2_BL_GPIO, TFT2_BL_PIN,
-    TFT2_RST_GPIO, TFT2_RST_PIN
-  );
 
 
-  // slow drawing
-//  for (size_t i=0; i<tft1.width; i+=1) {
-//    for (size_t j=0; j<tft1.height; j+=1) {
-//      GC9A01A_draw_pixel(&tft1, j, i, 0xFFFF);
-//      GC9A01A_draw_pixel(&tft2, j, i, 0xFFFF);
-//    }
-//  }
+  HAL_DAC_SetValue(&hdac, DAC_CHANNEL_1, DAC_ALIGN_8B_R, value);
+  value += 1;
+
+
 }
 
 void APP_main() {
-  set_left_eye_openness(state[0]);
-  set_right_eye_openness(state[1]);
+  char str[128];
 
-  int16_t eye_l_x_pixels = (int16_t)(-state[2] * EYE_MOVEMENT_X_SCALE);
-  int16_t eye_l_y_pixels = (int16_t)(-state[3] * EYE_MOVEMENT_Y_SCALE);
+  HAL_DAC_SetValue(&hdac, DAC_CHANNEL_1, DAC_ALIGN_8B_R, value);
+  value += 1;
 
-  int16_t eye_r_x_pixels = (int16_t)(-state[4] * EYE_MOVEMENT_X_SCALE);
-  int16_t eye_r_y_pixels = (int16_t)(-state[5] * EYE_MOVEMENT_Y_SCALE);
+  HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc_data_buffer_1, ADC_SAMPLES);
+  HAL_ADC_Start_DMA(&hadc2, (uint32_t *)adc_data_buffer_2, ADC_SAMPLES);
+  HAL_TIM_Base_Start(&htim2);
 
-  // left eye
-  GC9A01A_draw_pixels(&tft1, eye_l_x_pixels, eye_l_y_pixels, (uint16_t *)image_data, 240, 240);
+  while (!completed) {}
+  completed = 0;
+  HAL_TIM_Base_Stop(&htim2);
 
-  // right eye
-  GC9A01A_draw_pixels(&tft2, eye_r_x_pixels, eye_r_y_pixels, (uint16_t *)image_data, 240, 240);
+  int16_t max_signal = INT16_MIN;
+  int16_t min_signal = INT16_MAX;
+
+  uint32_t sum_1 = 0;
+  uint32_t sum_2 = 0;
+
+  for (size_t i=0; i<ADC_SAMPLES; i+=1) {
+    sum_1 += adc_data_buffer_1[i];
+    sum_2 += adc_data_buffer_2[i];
+  }
+
+  uint16_t mean_1 = sum_1 / ADC_SAMPLES;
+  uint16_t mean_2 = sum_2 / ADC_SAMPLES;
+
+  for (size_t i=0; i<ADC_SAMPLES; i+=1) {
+    data_1[i] = adc_data_buffer_1[i] - mean_1;
+    data_2[i] = adc_data_buffer_2[i] - mean_2;
+
+    if (data_1[i] > max_signal) {
+      max_signal = data_1[i];
+    }
+    if (data_1[i] < min_signal) {
+      min_signal = data_1[i];
+    }
+  }
+
+
+
+  if (max_signal - min_signal > 200) {
+
+  // sprintf(str, "max_signal: %d, min_signal: %d, mean_1: %d, mean_2: %d\n", max_signal, min_signal, mean_1, mean_2);
+  // HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), 100);
+
+  // Calculate cross-correlation
+  int32_t max_correlation = 0;
+  int16_t time_delay = 0;
+  
+  const int16_t max_shift = ADC_SAMPLES / 4;
+  
+  for (int16_t shift = -max_shift; shift < max_shift; shift+=1) {
+    int32_t correlation = 0;
+    
+    for (size_t i = 0; i < ADC_SAMPLES; i+=1) {
+      int32_t j = i + shift;
+      if (j >= 0 && j < ADC_SAMPLES) {
+        correlation += (int32_t)data_1[i] * (int32_t)data_2[j];
+      }
+    }
+    
+    if (correlation > max_correlation) {
+      max_correlation = correlation;
+      time_delay = shift;
+    }
+
+  }
+
+  time_delay_avg += 0.1 * (float)time_delay;
+
+  sprintf(str, "Time delay: %d\n", (int32_t)(time_delay_avg * 100));
+  HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), 100);
+
+  // Output the time delay
+  // sprintf(str, "max_correlation: %ld, Time delay: %d samples\n", max_correlation, time_delay);
+  // HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), 100);
+
+  // Original debug output
+//  for (size_t i=0; i<ADC_SAMPLES; i+=1) {
+//    sprintf(str, "0 %d %d 4096\n", adc_data_buffer_1[i], adc_data_buffer_2[i]);
+//    HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), 100);
+//  }
+
+//  HAL_Delay(100);
+  }
 
   counter += 1;
 }
