@@ -14,6 +14,7 @@
 
 
 extern ETH_HandleTypeDef heth;
+extern CAN_HandleTypeDef hcan1;
 extern SPI_HandleTypeDef hspi4;
 extern SPI_HandleTypeDef hspi5;
 extern TIM_HandleTypeDef htim1;
@@ -230,6 +231,35 @@ void UDP_multicast_init() {
 
 
 void APP_init() {
+
+  uint8_t counter = 0;
+
+  uint32_t filter_id = 0;
+  uint32_t filter_mask = 0x0;
+
+  CAN_FilterTypeDef filter_config;
+  filter_config.FilterBank = 0;
+  filter_config.FilterMode = CAN_FILTERMODE_IDMASK;
+  filter_config.FilterFIFOAssignment = CAN_FILTER_FIFO0;
+  filter_config.FilterIdHigh = filter_id << 5;
+  filter_config.FilterIdLow = 0;
+  filter_config.FilterMaskIdHigh = filter_mask << 5;
+  filter_config.FilterMaskIdLow = 0;
+  filter_config.FilterScale = CAN_FILTERSCALE_32BIT;
+  filter_config.FilterActivation = CAN_FILTER_ENABLE;
+  filter_config.SlaveStartFilterBank = 14;
+
+  HAL_CAN_ConfigFilter(&hcan1, &filter_config);
+
+  if (HAL_CAN_Start(&hcan1) != HAL_OK) {
+    while (1)
+    HAL_UART_Transmit(&huart3, (uint8_t *) "CAN init Error\r\n", strlen("CAN init Error\r\n"), 100);
+  }
+
+  HAL_Delay(2000);
+
+
+
   ETH_MACFilterConfigTypeDef filterConfig = {0};
   filterConfig.PromiscuousMode = ENABLE;
   filterConfig.PassAllMulticast = ENABLE;
@@ -278,6 +308,62 @@ void APP_init() {
 }
 
 void APP_main() {
+  // CAN TX
+  uint32_t tx_mailbox;
+
+  CAN_TxHeaderTypeDef tx_header;
+  tx_header.DLC = 4;
+  tx_header.IDE = CAN_ID_STD;
+  tx_header.RTR = CAN_RTR_DATA;
+  tx_header.StdId = 0x00A;
+  tx_header.TransmitGlobalTime = DISABLE;
+
+  uint8_t tx_data[8];
+  tx_data[0] = counter;
+  tx_data[1] = 0x07;
+  tx_data[2] = 0x08;
+  tx_data[3] = 0x09;
+
+  if (HAL_CAN_AddTxMessage(&hcan1, &tx_header, tx_data, &tx_mailbox) != HAL_OK) {
+    HAL_UART_Transmit(&huart3, (uint8_t *) "CAN TX Error\r\n", strlen("CAN TX Error\r\n"), 100);
+  }
+
+  HAL_Delay(1);
+
+  // CAN RX
+  uint32_t rx_fifo_level = HAL_CAN_GetRxFifoFillLevel(&hcan1, CAN_RX_FIFO0) || HAL_CAN_GetRxFifoFillLevel(&hcan1, CAN_RX_FIFO1);
+
+  char rx_level_str[50];
+  sprintf(rx_level_str, "level: %d\r\n", rx_fifo_level);
+  HAL_UART_Transmit(&huart3, (uint8_t *)rx_level_str, strlen(rx_level_str), 100);
+
+  if (rx_fifo_level > 0) {
+    HAL_UART_Transmit(&huart3, (uint8_t *)"CAN msg pending\r\n", strlen("CAN msg pending\r\n"), 100);
+
+    CAN_RxHeaderTypeDef rx_header;
+    uint8_t rx_data[8];
+
+    HAL_CAN_GetRxMessage(&hcan1, CAN_RX_FIFO0, &rx_header, rx_data);
+
+    char rx_data_str[32];
+    sprintf(rx_data_str, "receive data: %d\r\n", rx_data[0]);
+    HAL_UART_Transmit(&huart3, (uint8_t *)rx_data_str, strlen(rx_data_str), 100);
+  }
+
+  counter += 1;
+  HAL_Delay(100);
+
+    return;
+
+
+
+
+
+
+
+
+
+
 
   char str[128];
 //  sprintf(str, "hello \n");
