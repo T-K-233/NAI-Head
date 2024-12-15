@@ -12,12 +12,19 @@
 #include "lwip/igmp.h"
 #include "udp.h"
 
+#define ADC_SAMPLES    128
 
+#define ADC_BASELINE    0
+
+
+extern ADC_HandleTypeDef hadc1;
+extern ADC_HandleTypeDef hadc2;
 extern ETH_HandleTypeDef heth;
 extern CAN_HandleTypeDef hcan1;
 extern SPI_HandleTypeDef hspi4;
 extern SPI_HandleTypeDef hspi5;
 extern TIM_HandleTypeDef htim1;
+extern TIM_HandleTypeDef htim2;
 extern TIM_HandleTypeDef htim4;
 extern TIM_HandleTypeDef htim6;
 extern TIM_HandleTypeDef htim7;
@@ -53,7 +60,22 @@ ActuatorControl actuators;
 float states[N_STATES];
 
 
+
+float time_delay_avg = 0;
+
+
+uint16_t adc_data_buffer_1[ADC_SAMPLES];
+uint16_t adc_data_buffer_2[ADC_SAMPLES];
+int16_t data_1[ADC_SAMPLES];
+int16_t data_2[ADC_SAMPLES];
+
+
+uint8_t completed = 0;
 uint8_t debug_counter = 0;
+
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
+  completed = 1;
+}
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
   if (htim == &htim6) {
@@ -76,6 +98,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
   }
   else if (htim == &htim7) {
 //    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, 1);
+    states[2] = time_delay_avg * 0.3f;
     robot_set_neck_roll_pitch_yaw(&actuators, states[0], states[1], states[2]);
     robot_set_eyelid(&actuators, states[7], states[8]);
 //    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, 0);
@@ -386,6 +409,86 @@ void APP_main() {
   sys_check_timeouts();
 
 //  UDP_transmit();
+
+
+
+
+  HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc_data_buffer_1, ADC_SAMPLES);
+  HAL_ADC_Start_DMA(&hadc2, (uint32_t *)adc_data_buffer_2, ADC_SAMPLES);
+  HAL_TIM_Base_Start(&htim2);
+
+  while (!completed) {
+    HAL_Delay(1);
+  }
+  completed = 0;
+  HAL_TIM_Base_Stop(&htim2);
+
+  int16_t max_signal = INT16_MIN;
+  int16_t min_signal = INT16_MAX;
+
+  uint32_t sum_1 = 0;
+  uint32_t sum_2 = 0;
+
+  for (size_t i=0; i<ADC_SAMPLES; i+=1) {
+    sum_1 += adc_data_buffer_1[i];
+    sum_2 += adc_data_buffer_2[i];
+  }
+
+  uint16_t mean_1 = sum_1 / ADC_SAMPLES;
+  uint16_t mean_2 = sum_2 / ADC_SAMPLES;
+
+  for (size_t i=0; i<ADC_SAMPLES; i+=1) {
+    data_1[i] = adc_data_buffer_1[i] - mean_1;
+    data_2[i] = adc_data_buffer_2[i] - mean_2;
+
+    if (data_1[i] > max_signal) {
+      max_signal = data_1[i];
+    }
+    if (data_1[i] < min_signal) {
+      min_signal = data_1[i];
+    }
+  }
+
+
+  if (max_signal - min_signal > 200) {
+
+
+    // Calculate cross-correlation
+    int32_t max_correlation = 0;
+    int16_t time_delay = 0;
+
+    const int16_t max_shift = ADC_SAMPLES / 4;
+
+    for (int16_t shift = -max_shift; shift < max_shift; shift+=1) {
+      int32_t correlation = 0;
+
+      for (size_t i = 0; i < ADC_SAMPLES; i+=1) {
+        int32_t j = i + shift;
+        if (j >= 0 && j < ADC_SAMPLES) {
+          correlation += (int32_t)data_1[i] * (int32_t)data_2[j];
+        }
+      }
+
+      if (correlation > max_correlation) {
+        max_correlation = correlation;
+        time_delay = shift;
+      }
+
+    }
+
+
+    float avg_alpha = 0.9;
+    time_delay_avg = avg_alpha * (float)time_delay + (1 - avg_alpha) * time_delay_avg;
+
+
+    char str[128];
+    sprintf(str, "Max: %d, Min: %d, Time delay: %.2f\n", max_signal, min_signal, time_delay_avg);
+    HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
+  }
+
+  time_delay_avg *= 0.99f;
+
+
 
 
 
