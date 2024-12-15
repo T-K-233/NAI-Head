@@ -33,13 +33,27 @@ sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, MULTICAST_TTL)
 sock.bind(('', PORT))
 
 
+control_eyes = True
+
 try:
     while True:
         stick.update()
 
-        states[0] = stick.get_left_x()
-        states[1] = stick.get_left_y()
-        states[2] = stick.get_right_x()
+        if stick.get_a_button():
+            control_eyes = True
+        if stick.get_b_button():
+            control_eyes = False
+
+        if control_eyes:
+            states[3] = stick.get_left_x()
+            states[4] = stick.get_left_y()
+            states[5] = stick.get_right_x()
+            states[6] = stick.get_right_y()
+
+        else:
+            states[0] = stick.get_left_x()
+            states[1] = stick.get_left_y()
+            states[2] = stick.get_right_x()
 
         states[7] = 1 - stick.get_left_trigger()
         states[8] = 1 - stick.get_right_trigger()

@@ -48,6 +48,8 @@ CAN_HandleTypeDef hcan1;
 
 SPI_HandleTypeDef hspi4;
 SPI_HandleTypeDef hspi5;
+DMA_HandleTypeDef hdma_spi4_tx;
+DMA_HandleTypeDef hdma_spi5_tx;
 
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim4;
@@ -63,6 +65,7 @@ UART_HandleTypeDef huart3;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_USART3_UART_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_TIM4_Init(void);
@@ -112,6 +115,7 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_LWIP_Init();
   MX_USART3_UART_Init();
   MX_TIM1_Init();
@@ -548,7 +552,7 @@ static void MX_TIM6_Init(void)
   htim6.Instance = TIM6;
   htim6.Init.Prescaler = 799;
   htim6.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim6.Init.Period = 9999;
+  htim6.Init.Period = 4999;
   htim6.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim6) != HAL_OK)
   {
@@ -634,6 +638,25 @@ static void MX_USART3_UART_Init(void)
   /* USER CODE BEGIN USART3_Init 2 */
 
   /* USER CODE END USART3_Init 2 */
+
+}
+
+/**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA2_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA2_Stream1_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Stream1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Stream1_IRQn);
+  /* DMA2_Stream4_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Stream4_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Stream4_IRQn);
 
 }
 

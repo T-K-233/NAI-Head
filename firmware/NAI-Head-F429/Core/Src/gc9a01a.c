@@ -138,14 +138,18 @@ void GC9A01A_draw_pixels(GC9A01A *tft, int16_t x, int16_t y, uint16_t *color, ui
   uint16_t data_ptr_offset = tft->width * ptr_offset_y + ptr_offset_x;
 
   GC9A01A_set_spi_datasize(tft, SPI_DATASIZE_16BIT);
+
+  /* blocking transfer */
 //  for (size_t i = 0; i < height; i += 1) {    // For each scanline...
 //    GC9A01A_transmit_data(tft, width, data_ptr + data_ptr_offset);   // Push one row
 //    data_ptr += tft->width;                                          // Advance pointer by one full line
 //  }
-  GC9A01A_transmit_data(tft, tft->width*height, data_ptr + data_ptr_offset);
+//  GC9A01A_end_spi_transaction(tft);
 
-  GC9A01A_end_spi_transaction(tft);
+  /* DMA transfer */
+  HAL_SPI_Transmit_DMA(tft->hspi, (uint8_t *)(data_ptr + data_ptr_offset), tft->width * height);
 }
+
 
 void GC9A01A_draw_screen(GC9A01A *tft, uint16_t *img) {
   GC9A01A_draw_pixels(tft, 0, 0, img, tft->width, tft->height);

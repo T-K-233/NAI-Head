@@ -57,7 +57,11 @@ uint8_t debug_counter = 0;
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
   if (htim == &htim6) {
-    HAL_GPIO_WritePin(GPIOE, GPIO_PIN_0, 1);
+//    HAL_GPIO_WritePin(GPIOE, GPIO_PIN_0, 1);  // debug
+//    HAL_GPIO_WritePin(GPIOE, GPIO_PIN_0, 0);  // debug
+//    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, 1);  // debug
+//    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, 0);  // debug
+
     int16_t eye_l_x_pixels = (int16_t)(-states[3] * EYE_MOVEMENT_X_SCALE);
     int16_t eye_l_y_pixels = (int16_t)(-states[4] * EYE_MOVEMENT_Y_SCALE);
 
@@ -68,15 +72,26 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
     GC9A01A_draw_pixels(&tft1, eye_l_x_pixels, eye_l_y_pixels, (uint16_t *)image_data, 240, 240);
     // right eye
     GC9A01A_draw_pixels(&tft2, eye_r_x_pixels, eye_r_y_pixels, (uint16_t *)image_data, 240, 240);
-    HAL_GPIO_WritePin(GPIOE, GPIO_PIN_0, 0);
-  }
-  else if (htim == &htim7) {
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, 1);
-    robot_set_neck_roll_pitch_yaw(&actuators, states[0], states[1], states[2]);
-    robot_set_eyelid(&actuators, states[7], states[8]);
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, 0);
 
   }
+  else if (htim == &htim7) {
+//    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, 1);
+    robot_set_neck_roll_pitch_yaw(&actuators, states[0], states[1], states[2]);
+    robot_set_eyelid(&actuators, states[7], states[8]);
+//    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, 0);
+
+  }
+}
+
+void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi) {
+
+  if (hspi == &hspi4) {
+    HAL_GPIO_WritePin(GPIO_SPI4_CS_GPIO_Port, GPIO_SPI4_CS_Pin, 1);
+  }
+  else if (hspi == &hspi5) {
+    HAL_GPIO_WritePin(GPIO_SPI5_CS_GPIO_Port, GPIO_SPI5_CS_Pin, 1);
+  }
+
 }
 
 
@@ -85,12 +100,7 @@ void UDP_receive_handler(void *arg, struct udp_pcb *udp_control, struct pbuf *rx
     states[i] = ((float *)rx_packet->payload)[i];
   }
 
-  char str[128];
-  sprintf(str, "Receive UDP of len %d\n", rx_packet->len);
-  HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
-
   pbuf_free(rx_packet);
-
 }
 
 void UDP_init_receive() {
@@ -293,7 +303,6 @@ void APP_init() {
       &htim4, TIM_CHANNEL_3, TIM_CHANNEL_4
     );
 
-
   GC9A01A_init(&tft1, &hspi4,
     GPIO_SPI4_CS_GPIO_Port, GPIO_SPI4_CS_Pin,
     GPIO_SPI4_DC_GPIO_Port, GPIO_SPI4_DC_Pin,
@@ -308,13 +317,7 @@ void APP_init() {
     NULL, 0
   );
 
-//  for (size_t i=0; i<tft1.width; i+=1) {
-//    for (size_t j=0; j<tft1.height; j+=1) {
-//      GC9A01A_draw_pixel(&tft1, j, i, 0xFFFF);
-//      GC9A01A_draw_pixel(&tft2, j, i, 0xFFFF);
-//    }
-//  }
-
+  // start triggers
   HAL_TIM_Base_Start_IT(&htim6);
   HAL_TIM_Base_Start_IT(&htim7);
 
@@ -388,7 +391,7 @@ void APP_main() {
 
   debug_counter += 1;
 
-  if (debug_counter >= 20) {
+  if (debug_counter >= 10) {
     char str[128];
     sprintf(str, "states: %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f\n",
         states[0], states[1], states[2],

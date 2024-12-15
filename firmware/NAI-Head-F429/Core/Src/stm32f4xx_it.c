@@ -55,8 +55,8 @@
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
-extern SPI_HandleTypeDef hspi4;
-extern SPI_HandleTypeDef hspi5;
+extern DMA_HandleTypeDef hdma_spi4_tx;
+extern DMA_HandleTypeDef hdma_spi5_tx;
 extern TIM_HandleTypeDef htim6;
 extern TIM_HandleTypeDef htim7;
 /* USER CODE BEGIN EV */
@@ -230,31 +230,31 @@ void TIM7_IRQHandler(void)
 }
 
 /**
-  * @brief This function handles SPI4 global interrupt.
+  * @brief This function handles DMA2 stream1 global interrupt.
   */
-void SPI4_IRQHandler(void)
+void DMA2_Stream1_IRQHandler(void)
 {
-  /* USER CODE BEGIN SPI4_IRQn 0 */
+  /* USER CODE BEGIN DMA2_Stream1_IRQn 0 */
 
-  /* USER CODE END SPI4_IRQn 0 */
-  HAL_SPI_IRQHandler(&hspi4);
-  /* USER CODE BEGIN SPI4_IRQn 1 */
+  /* USER CODE END DMA2_Stream1_IRQn 0 */
+  HAL_DMA_IRQHandler(&hdma_spi4_tx);
+  /* USER CODE BEGIN DMA2_Stream1_IRQn 1 */
 
-  /* USER CODE END SPI4_IRQn 1 */
+  /* USER CODE END DMA2_Stream1_IRQn 1 */
 }
 
 /**
-  * @brief This function handles SPI5 global interrupt.
+  * @brief This function handles DMA2 stream4 global interrupt.
   */
-void SPI5_IRQHandler(void)
+void DMA2_Stream4_IRQHandler(void)
 {
-  /* USER CODE BEGIN SPI5_IRQn 0 */
+  /* USER CODE BEGIN DMA2_Stream4_IRQn 0 */
 
-  /* USER CODE END SPI5_IRQn 0 */
-  HAL_SPI_IRQHandler(&hspi5);
-  /* USER CODE BEGIN SPI5_IRQn 1 */
+  /* USER CODE END DMA2_Stream4_IRQn 0 */
+  HAL_DMA_IRQHandler(&hdma_spi5_tx);
+  /* USER CODE BEGIN DMA2_Stream4_IRQn 1 */
 
-  /* USER CODE END SPI5_IRQn 1 */
+  /* USER CODE END DMA2_Stream4_IRQn 1 */
 }
 
 /* USER CODE BEGIN 1 */
