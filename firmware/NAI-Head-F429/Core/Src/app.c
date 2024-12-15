@@ -19,6 +19,8 @@ extern SPI_HandleTypeDef hspi4;
 extern SPI_HandleTypeDef hspi5;
 extern TIM_HandleTypeDef htim1;
 extern TIM_HandleTypeDef htim4;
+extern TIM_HandleTypeDef htim6;
+extern TIM_HandleTypeDef htim7;
 extern UART_HandleTypeDef huart3;
 
 extern struct netif gnetif;
@@ -33,6 +35,8 @@ extern size_t image_end[];
 
 GC9A01A tft1;
 GC9A01A tft2;
+
+ActuatorControl actuators;
 
 
 /**
@@ -49,18 +53,30 @@ GC9A01A tft2;
 float states[N_STATES];
 
 
-void set_left_eye_openness(float val) {
-  val = val < 1.f ? val : 1.f;
-  val = val > 0.f ? val : 0.f;
+uint8_t debug_counter = 0;
 
-  __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_3, EYELID_L_FULLCLOSE * (1 - val) + EYELID_L_FULLOPEN * val);
-}
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+  if (htim == &htim6) {
+    HAL_GPIO_WritePin(GPIOE, GPIO_PIN_0, 1);
+    int16_t eye_l_x_pixels = (int16_t)(-states[3] * EYE_MOVEMENT_X_SCALE);
+    int16_t eye_l_y_pixels = (int16_t)(-states[4] * EYE_MOVEMENT_Y_SCALE);
 
-void set_right_eye_openness(float val) {
-  val = val < 1.f ? val : 1.f;
-  val = val > 0.f ? val : 0.f;
+    int16_t eye_r_x_pixels = (int16_t)(-states[5] * EYE_MOVEMENT_X_SCALE);
+    int16_t eye_r_y_pixels = (int16_t)(-states[6] * EYE_MOVEMENT_Y_SCALE);
 
-  __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_4, EYELID_R_FULLCLOSE * (1 - val) + EYELID_R_FULLOPEN * val);
+    // left eye
+    GC9A01A_draw_pixels(&tft1, eye_l_x_pixels, eye_l_y_pixels, (uint16_t *)image_data, 240, 240);
+    // right eye
+    GC9A01A_draw_pixels(&tft2, eye_r_x_pixels, eye_r_y_pixels, (uint16_t *)image_data, 240, 240);
+    HAL_GPIO_WritePin(GPIOE, GPIO_PIN_0, 0);
+  }
+  else if (htim == &htim7) {
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, 1);
+    robot_set_neck_roll_pitch_yaw(&actuators, states[0], states[1], states[2]);
+    robot_set_eyelid(&actuators, states[7], states[8]);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, 0);
+
+  }
 }
 
 
@@ -250,13 +266,13 @@ void APP_init() {
   filter_config.SlaveStartFilterBank = 14;
 
   HAL_CAN_ConfigFilter(&hcan1, &filter_config);
-
-  if (HAL_CAN_Start(&hcan1) != HAL_OK) {
-    while (1)
-    HAL_UART_Transmit(&huart3, (uint8_t *) "CAN init Error\r\n", strlen("CAN init Error\r\n"), 100);
-  }
-
-  HAL_Delay(2000);
+//
+//  if (HAL_CAN_Start(&hcan1) != HAL_OK) {
+//    while (1)
+//    HAL_UART_Transmit(&huart3, (uint8_t *) "CAN init Error\r\n", strlen("CAN init Error\r\n"), 100);
+//  }
+//
+//  HAL_Delay(2000);
 
 
 
@@ -272,13 +288,11 @@ void APP_init() {
 
   igmp_init();
 
-  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
-  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
-  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
+  robot_actuator_init(&actuators,
+      &htim1, TIM_CHANNEL_1, TIM_CHANNEL_2, TIM_CHANNEL_3,
+      &htim4, TIM_CHANNEL_3, TIM_CHANNEL_4
+    );
 
-  HAL_TIM_Base_Start(&htim4);
-  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_3);
-  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_4);
 
   GC9A01A_init(&tft1, &hspi4,
     GPIO_SPI4_CS_GPIO_Port, GPIO_SPI4_CS_Pin,
@@ -300,6 +314,9 @@ void APP_init() {
 //      GC9A01A_draw_pixel(&tft2, j, i, 0xFFFF);
 //    }
 //  }
+
+  HAL_TIM_Base_Start_IT(&htim6);
+  HAL_TIM_Base_Start_IT(&htim7);
 
 
   UDP_init_receive();
@@ -324,36 +341,33 @@ void APP_main() {
   tx_data[2] = 0x08;
   tx_data[3] = 0x09;
 
-  if (HAL_CAN_AddTxMessage(&hcan1, &tx_header, tx_data, &tx_mailbox) != HAL_OK) {
-    HAL_UART_Transmit(&huart3, (uint8_t *) "CAN TX Error\r\n", strlen("CAN TX Error\r\n"), 100);
-  }
+//  if (HAL_CAN_AddTxMessage(&hcan1, &tx_header, tx_data, &tx_mailbox) != HAL_OK) {
+//    HAL_UART_Transmit(&huart3, (uint8_t *) "CAN TX Error\r\n", strlen("CAN TX Error\r\n"), 100);
+//  }
 
-  HAL_Delay(1);
+//  HAL_Delay(1);
 
   // CAN RX
-  uint32_t rx_fifo_level = HAL_CAN_GetRxFifoFillLevel(&hcan1, CAN_RX_FIFO0) || HAL_CAN_GetRxFifoFillLevel(&hcan1, CAN_RX_FIFO1);
+//  uint32_t rx_fifo_level = HAL_CAN_GetRxFifoFillLevel(&hcan1, CAN_RX_FIFO0) || HAL_CAN_GetRxFifoFillLevel(&hcan1, CAN_RX_FIFO1);
 
-  char rx_level_str[50];
-  sprintf(rx_level_str, "level: %d\r\n", rx_fifo_level);
-  HAL_UART_Transmit(&huart3, (uint8_t *)rx_level_str, strlen(rx_level_str), 100);
+//  char rx_level_str[50];
+//  sprintf(rx_level_str, "level: %d\r\n", rx_fifo_level);
+//  HAL_UART_Transmit(&huart3, (uint8_t *)rx_level_str, strlen(rx_level_str), 100);
+//
+//  if (rx_fifo_level > 0) {
+//    HAL_UART_Transmit(&huart3, (uint8_t *)"CAN msg pending\r\n", strlen("CAN msg pending\r\n"), 100);
+//
+//    CAN_RxHeaderTypeDef rx_header;
+//    uint8_t rx_data[8];
+//
+//    HAL_CAN_GetRxMessage(&hcan1, CAN_RX_FIFO0, &rx_header, rx_data);
+//
+//    char rx_data_str[32];
+//    sprintf(rx_data_str, "receive data: %d\r\n", rx_data[0]);
+//    HAL_UART_Transmit(&huart3, (uint8_t *)rx_data_str, strlen(rx_data_str), 100);
+//  }
 
-  if (rx_fifo_level > 0) {
-    HAL_UART_Transmit(&huart3, (uint8_t *)"CAN msg pending\r\n", strlen("CAN msg pending\r\n"), 100);
-
-    CAN_RxHeaderTypeDef rx_header;
-    uint8_t rx_data[8];
-
-    HAL_CAN_GetRxMessage(&hcan1, CAN_RX_FIFO0, &rx_header, rx_data);
-
-    char rx_data_str[32];
-    sprintf(rx_data_str, "receive data: %d\r\n", rx_data[0]);
-    HAL_UART_Transmit(&huart3, (uint8_t *)rx_data_str, strlen(rx_data_str), 100);
-  }
-
-  counter += 1;
-  HAL_Delay(100);
-
-    return;
+//  HAL_Delay(100);
 
 
 
@@ -362,40 +376,29 @@ void APP_main() {
 
 
 
-
-
-
-  char str[128];
 //  sprintf(str, "hello \n");
 //  HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
 
   ethernetif_input(&gnetif);
-//  igmp_tmr();
   sys_check_timeouts();
 
 //  UDP_transmit();
 
 
 
-  int16_t eye_l_x_pixels = (int16_t)(-states[3] * EYE_MOVEMENT_X_SCALE);
-  int16_t eye_l_y_pixels = (int16_t)(-states[4] * EYE_MOVEMENT_Y_SCALE);
+  debug_counter += 1;
 
-  int16_t eye_r_x_pixels = (int16_t)(-states[5] * EYE_MOVEMENT_X_SCALE);
-  int16_t eye_r_y_pixels = (int16_t)(-states[6] * EYE_MOVEMENT_Y_SCALE);
+  if (debug_counter >= 20) {
+    char str[128];
+    sprintf(str, "states: %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f\n",
+        states[0], states[1], states[2],
+        states[3], states[4], states[5], states[6],
+        states[7], states[8]);
+    HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
 
-  set_left_eye_openness(states[7]);
-  set_right_eye_openness(states[8]);
 
-  // left eye
-  GC9A01A_draw_pixels(&tft1, eye_l_x_pixels, eye_l_y_pixels, (uint16_t *)image_data, 240, 240);
-  // right eye
-  GC9A01A_draw_pixels(&tft2, eye_r_x_pixels, eye_r_y_pixels, (uint16_t *)image_data, 240, 240);
+    debug_counter = 0;
+  }
 
-//  sprintf(str, "states: %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f\n",
-//      states[0], states[1], states[2],
-//      states[3], states[4], states[5], states[6],
-//      states[7], states[8]);
-//  HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
-//
-//  HAL_Delay(100);
+  HAL_Delay(10);
 }
