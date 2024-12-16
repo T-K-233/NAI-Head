@@ -8,11 +8,13 @@
 #ifndef INC_APP_H_
 #define INC_APP_H_
 
+#include <actuators.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "stm32f4xx_hal.h"
 #include "gc9a01a.h"
+#include "actuators.h"
 
 // http://elm-chan.org/junk/32bit/binclude.html
 #define INCLUDE_FILE(section, filename, symbol) asm (\
@@ -32,12 +34,6 @@
 #define N_STATES    9
 
 
-
-
-#define EYELID_L_FULLOPEN         1750
-#define EYELID_R_FULLOPEN         1250
-#define EYELID_L_FULLCLOSE        1280
-#define EYELID_R_FULLCLOSE        1720
 
 
 #define EYE_MOVEMENT_X_SCALE      30.f
