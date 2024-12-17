@@ -1,11 +1,56 @@
 import cv2
 import mediapipe as mp
+from keypoint_classifier import *
+import copy
+import itertools
 
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
 mp_hands = mp.solutions.hands
 
-print("Starting camera")
+def calc_landmark_list(image, landmarks):
+    image_width, image_height = image.shape[1], image.shape[0]
+
+    landmark_point = []
+
+    # Keypoint
+    for _, landmark in enumerate(landmarks.landmark):
+        landmark_x = min(int(landmark.x * image_width), image_width - 1)
+        landmark_y = min(int(landmark.y * image_height), image_height - 1)
+        # landmark_z = landmark.z
+
+        landmark_point.append([landmark_x, landmark_y])
+
+    return landmark_point
+
+def pre_process_landmark(landmark_list):
+    temp_landmark_list = copy.deepcopy(landmark_list)
+
+    # Convert to relative coordinates
+    base_x, base_y = 0, 0
+    for index, landmark_point in enumerate(temp_landmark_list):
+        if index == 0:
+            base_x, base_y = landmark_point[0], landmark_point[1]
+
+        temp_landmark_list[index][0] = temp_landmark_list[index][0] - base_x
+        temp_landmark_list[index][1] = temp_landmark_list[index][1] - base_y
+
+    # Convert to a one-dimensional list
+    temp_landmark_list = list(
+        itertools.chain.from_iterable(temp_landmark_list))
+
+    # Normalization
+    max_value = max(list(map(abs, temp_landmark_list)))
+
+    def normalize_(n):
+        return n / max_value
+
+    temp_landmark_list = list(map(normalize_, temp_landmark_list))
+
+    return temp_landmark_list
+
+gesture_model = get_model()
+
 cap = cv2.VideoCapture(0)
 
 with mp_hands.Hands(
@@ -14,7 +59,6 @@ with mp_hands.Hands(
     min_tracking_confidence=0.5) as hands:
 
     print("Camera started")
-        
     while cap.isOpened():
         print("Reading frame")
         success, image = cap.read()
@@ -26,15 +70,20 @@ with mp_hands.Hands(
 
         # To improve performance, optionally mark the image as not writeable to
         # pass by reference.
-        print("image captured")
         image.flags.writeable = False
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         results = hands.process(image)
-        print("before show")
         # Draw the hand annotations on the image.
         image.flags.writeable = True
         image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
         if results.multi_hand_landmarks:
+            landmark_list = calc_landmark_list(image, results.multi_hand_landmarks[0])
+            # print(results.multi_hand_landmarks)
+            pre_processed_landmark_list = pre_process_landmark(
+                            landmark_list)
+            features = torch.tensor(pre_processed_landmark_list).unsqueeze(0)
+            outputs = gesture_model(features)
+            label_ind = torch.argmax(outputs).item()
             for hand_landmarks in results.multi_hand_landmarks:
                 mp_drawing.draw_landmarks(
                 image,
