@@ -1,8 +1,29 @@
+import socket
 import cv2
 import mediapipe as mp
 from keypoint_classifier import *
 import copy
 import itertools
+import numpy as np
+
+ADDR = "172.28.0.64"
+PORT = 7000
+
+N_STATES = 12
+
+states = np.zeros(N_STATES, dtype=np.float32)
+
+states[7] = 1.0
+states[8] = 1.0
+states[9] = 0.0
+
+# gesture
+states[10] = 0.0
+
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+sock.bind(("", PORT))
+
+
 
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
@@ -91,6 +112,10 @@ with mp_hands.Hands(
                 mp_hands.HAND_CONNECTIONS,
                 mp_drawing_styles.get_default_hand_landmarks_style(),
                 mp_drawing_styles.get_default_hand_connections_style())
+
+        states[10] = label_ind
+        sock.sendto(states.tobytes(), (ADDR, PORT))
+        
         # Flip the image horizontally for a selfie-view display.
         cv2.imshow("MediaPipe Hands", cv2.flip(image, 1))
         if cv2.waitKey(5) & 0xFF == 27:
