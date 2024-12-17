@@ -133,7 +133,7 @@ void UDP_init_receive() {
   /* 2. Bind the udp_control to the local port */
   ip_addr_t ip_addr;
   u16_t port = 7000;
-  IP_ADDR4(&ip_addr, 10, 0, 64, 64);
+  IP_ADDR4(&ip_addr, 172, 28, 0, 64);
 
   err_t err = udp_bind(udp_control, &ip_addr, port);
 
@@ -193,13 +193,13 @@ void UDP_init_transmit(void) {
 
   /* Bind the block to module's IP and port */
   ip_addr_t myIPaddr;
-  IP_ADDR4(&myIPaddr, 10, 0, 64, 64);
+  IP_ADDR4(&myIPaddr, 172, 28, 0, 64);
   udp_bind(upcb, &myIPaddr, 8);
 
 
   /* configure destination IP address and port */
   ip_addr_t DestIPaddr;
-  IP_ADDR4(&DestIPaddr, 10, 0, 0, 10);
+  IP_ADDR4(&DestIPaddr, 172, 28, 0, 2);
   err= udp_connect(upcb, &DestIPaddr, 7000);
 
   if (err == ERR_OK) {
@@ -210,7 +210,6 @@ void UDP_init_transmit(void) {
     udp_recv(upcb, UDP_client_receive_callback, NULL);
   }
 }
-
 
 
 
@@ -243,7 +242,7 @@ void UDP_multicast_init() {
   }
 
   IP4_ADDR(&ipgroup, 224, 1, 1, 1);
-  IP4_ADDR(&localIP, 10, 0, 64, 64);
+  IP4_ADDR(&localIP, 172, 28, 0, 64);
 
   // Create new UDP PCB
   g_udppcb = udp_new();
@@ -486,7 +485,7 @@ void APP_main() {
     HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
   }
 
-  time_delay_avg *= 0.99f;
+  time_delay_avg *= 0.999f;
 
 
 

@@ -5,7 +5,7 @@ import numpy as np
 from cc.xboxcontroller import XboxController
 
 # ADDR = "224.1.1.1"
-ADDR = "10.0.64.64"
+ADDR = "172.28.0.64"
 PORT = 7000
 
 MULTICAST_TTL = 2

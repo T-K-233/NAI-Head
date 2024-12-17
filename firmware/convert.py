@@ -5,7 +5,7 @@ import cv2
 
 def convert(img_path):
     img = cv2.imread(img_path)
-    
+
     # check image size is 240x240
     if img.shape[0] != 240 or img.shape[1] != 240:
         print("Image size must be 240x240")
@@ -15,8 +15,10 @@ def convert(img_path):
     
     # convert to np array
     img = img.flatten()
+
+    filename = img_path.split("/")[-1].replace(".png", ".bin")
     
-    with open("./Core/Inc/img.bin", "wb") as f:
+    with open(f"./NAI-Head-F429/Core/Inc/{filename}", "wb") as f:
         for i in range(0, img.shape[0], 3):
             # convert to 565 binary
             r = img[i]
@@ -28,4 +30,6 @@ def convert(img_path):
     
     
 if __name__ == "__main__":
-    convert("layer.png")
+    convert("iris.png")
+    convert("iris_large.png")
+    convert("iris_heart.png")
