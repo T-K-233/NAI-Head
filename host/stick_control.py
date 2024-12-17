@@ -10,7 +10,7 @@ PORT = 7000
 
 MULTICAST_TTL = 2
 
-N_STATES = 9
+N_STATES = 10
 
 stick = XboxController(0, deadzone=0, dampen=1e-2)
 
@@ -57,6 +57,13 @@ try:
 
         states[7] = 1 - stick.get_left_trigger()
         states[8] = 1 - stick.get_right_trigger()
+
+        if stick.get_dpad() == 0:
+            states[9] = 2
+        elif stick.get_dpad() == 180:
+            states[9] = 1
+        elif stick.get_dpad() == 90:
+            states[9] = 0
 
         print(states)
 

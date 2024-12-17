@@ -1,29 +1,31 @@
 import socket
 import struct
 
-ADDR = "224.1.1.1"
-PORT = 7000
 
-MULTICAST_TTL = 2
+N_STATES = 10
 
-# open UDP socket
-sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, MULTICAST_TTL)
+# Create UDP socket
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-# Allow multiple sockets to use the same PORT number
-sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+# Bind to all interfaces on port 7000
+server_address = ("", 8000)
+sock.bind(server_address)
 
-# Bind to all interfaces
-sock.bind(('', PORT))
+print(f"Starting UDP server on port {server_address[1]}")
 
-# Join the multicast group
-mreq = struct.pack('4sl', socket.inet_aton(ADDR), socket.INADDR_ANY)
-sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+while True:
+    try:
+        # Receive data (buffer size of 1024 bytes)
+        data, address = sock.recvfrom(4 * N_STATES)
 
-print("Listening on", ADDR, "on port", PORT)
-data, addr = sock.recvfrom(1024)
-print("Received", data, "from", addr)
+        states = struct.unpack("10f", data)
+        print(f"Received {len(data)} bytes from {address}")
+        print(f"Data: {states}")
+        
+    except KeyboardInterrupt:
+        print("\nShutting down server...")
+        break
 
 sock.close()
 
-print("Done")
+

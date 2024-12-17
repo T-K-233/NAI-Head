@@ -34,10 +34,20 @@ extern struct netif gnetif;
 
 
 // load the weight data block from the model.bin file
-INCLUDE_FILE(".rodata", "./img.bin", image);
-extern uint8_t image_data[];
-extern size_t image_start[];
-extern size_t image_end[];
+INCLUDE_FILE(".rodata", "./iris.bin", iris_normal);
+extern uint8_t iris_normal_data[];
+extern size_t iris_normal_start[];
+extern size_t iris_normal_end[];
+
+INCLUDE_FILE(".rodata", "./iris_heart.bin", iris_heart);
+extern uint8_t iris_heart_data[];
+extern size_t iris_heart_start[];
+extern size_t iris_heart_end[];
+
+INCLUDE_FILE(".rodata", "./iris_large.bin", iris_large);
+extern uint8_t iris_large_data[];
+extern size_t iris_large_start[];
+extern size_t iris_large_end[];
 
 
 GC9A01A tft1;
@@ -56,12 +66,21 @@ ActuatorControl actuators;
  * state[6]: EyeRightY
  * state[7]: EyeOpenLeft
  * state[8]: EyeOpenRight
+ * state[9]: Iris
+ *
+ * state[10]: gesture
  */
 float states[N_STATES];
-
+float acs[N_ACTIONS];
 
 
 float time_delay_avg = 0;
+
+size_t last_detected_sound = 0;
+
+uint8_t animation_type = 0;
+size_t animation_counter = 0;
+size_t blink_counter = 0;
 
 
 uint16_t adc_data_buffer_1[ADC_SAMPLES];
@@ -84,24 +103,36 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 //    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, 1);  // debug
 //    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, 0);  // debug
 
-    int16_t eye_l_x_pixels = (int16_t)(-states[3] * EYE_MOVEMENT_X_SCALE);
-    int16_t eye_l_y_pixels = (int16_t)(-states[4] * EYE_MOVEMENT_Y_SCALE);
+    int16_t eye_l_x_pixels = (int16_t)(-acs[3] * EYE_MOVEMENT_X_SCALE);
+    int16_t eye_l_y_pixels = (int16_t)(-acs[4] * EYE_MOVEMENT_Y_SCALE);
 
-    int16_t eye_r_x_pixels = (int16_t)(-states[5] * EYE_MOVEMENT_X_SCALE);
-    int16_t eye_r_y_pixels = (int16_t)(-states[6] * EYE_MOVEMENT_Y_SCALE);
+    int16_t eye_r_x_pixels = (int16_t)(-acs[5] * EYE_MOVEMENT_X_SCALE);
+    int16_t eye_r_y_pixels = (int16_t)(-acs[6] * EYE_MOVEMENT_Y_SCALE);
+
+    uint16_t *iris_img_data;
+    if (acs[9] == 1.f) {
+      iris_img_data = (uint16_t *)iris_large_data;
+      eye_l_x_pixels /= 2;
+      eye_l_y_pixels /= 2;
+      eye_r_x_pixels /= 2;
+      eye_r_y_pixels /= 2;
+    }
+    else if (acs[9] == 2.f) {
+      iris_img_data = (uint16_t *)iris_heart_data;
+    }
+    else {
+      iris_img_data = (uint16_t *)iris_normal_data;
+    }
 
     // left eye
-    GC9A01A_draw_pixels(&tft1, eye_l_x_pixels, eye_l_y_pixels, (uint16_t *)image_data, 240, 240);
+    GC9A01A_draw_pixels(&tft1, eye_l_x_pixels, eye_l_y_pixels, iris_img_data, 240, 240);
     // right eye
-    GC9A01A_draw_pixels(&tft2, eye_r_x_pixels, eye_r_y_pixels, (uint16_t *)image_data, 240, 240);
+    GC9A01A_draw_pixels(&tft2, eye_r_x_pixels, eye_r_y_pixels, iris_img_data, 240, 240);
 
   }
   else if (htim == &htim7) {
-//    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, 1);
-    states[2] = time_delay_avg * 0.3f;
-    robot_set_neck_roll_pitch_yaw(&actuators, states[0], states[1], states[2]);
-    robot_set_eyelid(&actuators, states[7], states[8]);
-//    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, 0);
+    robot_set_neck_roll_pitch_yaw(&actuators, acs[0], acs[1], acs[2]);
+    robot_set_eyelid(&actuators, acs[7], acs[8]);
 
   }
 }
@@ -164,50 +195,50 @@ void UDP_client_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p
 
 
 void UDP_transmit() {
-  struct pbuf *txBuf;
-  char data[100];
+  struct pbuf *tx_buf;
 
-  int len = sprintf(data, "sending UDP client message %lu", counter);
+  float acs_buf[N_ACTIONS];
+  size_t len = N_ACTIONS * sizeof(float);
+
+  memcpy(acs_buf, acs, len);
+
 
   /* allocate pbuf from pool*/
-  txBuf = pbuf_alloc(PBUF_TRANSPORT, len, PBUF_RAM);
+  tx_buf = pbuf_alloc(PBUF_TRANSPORT, len, PBUF_RAM);
 
-  if (txBuf != NULL)
-  {
+  if (tx_buf != NULL) {
     /* copy data to pbuf */
-    pbuf_take(txBuf, data, len);
+    pbuf_take(tx_buf, acs_buf, len);
 
     /* send udp data */
-    udp_send(upcb, txBuf);
+    udp_send(upcb, tx_buf);
 
     /* free pbuf */
-    pbuf_free(txBuf);
+    pbuf_free(tx_buf);
   }
 }
 
 void UDP_init_transmit(void) {
-  err_t err;
-
   /* 1. Create a new UDP control block  */
   upcb = udp_new();
 
   /* Bind the block to module's IP and port */
-  ip_addr_t myIPaddr;
-  IP_ADDR4(&myIPaddr, 172, 28, 0, 64);
-  udp_bind(upcb, &myIPaddr, 8);
+  ip_addr_t my_ip_addr;
+  IP_ADDR4(&my_ip_addr, 172, 28, 0, 64);
+  udp_bind(upcb, &my_ip_addr, 8);
 
 
   /* configure destination IP address and port */
-  ip_addr_t DestIPaddr;
-  IP_ADDR4(&DestIPaddr, 172, 28, 0, 2);
-  err= udp_connect(upcb, &DestIPaddr, 7000);
+  ip_addr_t dest_ip_addr;
+  IP_ADDR4(&dest_ip_addr, 172, 28, 0, 10);
+  err_t err = udp_connect(upcb, &dest_ip_addr, 8000);
 
-  if (err == ERR_OK) {
-    /* 2. Send message to server */
-    UDP_transmit();
+  if (err) {
+    // Debug print
+    char str[256];
+    sprintf(str, "Error initializing UDP TX!\n");
+    HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
 
-    /* 3. Set a receive callback for the upcb */
-    udp_recv(upcb, UDP_client_receive_callback, NULL);
   }
 }
 
@@ -345,8 +376,11 @@ void APP_init() {
 
 
   UDP_init_receive();
-//  UDP_init_transmit();
+  UDP_init_transmit();
 //  UDP_multicast_init();
+
+  acs[7] = 0.5f;
+  acs[8] = 0.5f;
 }
 
 void APP_main() {
@@ -365,6 +399,9 @@ void APP_main() {
   tx_data[1] = 0x07;
   tx_data[2] = 0x08;
   tx_data[3] = 0x09;
+
+
+
 
 //  if (HAL_CAN_AddTxMessage(&hcan1, &tx_header, tx_data, &tx_mailbox) != HAL_OK) {
 //    HAL_UART_Transmit(&huart3, (uint8_t *) "CAN TX Error\r\n", strlen("CAN TX Error\r\n"), 100);
@@ -396,22 +433,15 @@ void APP_main() {
 
 
 
-
-
-
-
-
-//  sprintf(str, "hello \n");
-//  HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
-
+  /* receive UDP packet */
   ethernetif_input(&gnetif);
   sys_check_timeouts();
 
-//  UDP_transmit();
+  /* transmit UDP packet */
+  UDP_transmit();
 
 
-
-
+  /* perform audio recognition */
   HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc_data_buffer_1, ADC_SAMPLES);
   HAL_ADC_Start_DMA(&hadc2, (uint32_t *)adc_data_buffer_2, ADC_SAMPLES);
   HAL_TIM_Base_Start(&htim2);
@@ -422,6 +452,7 @@ void APP_main() {
   completed = 0;
   HAL_TIM_Base_Stop(&htim2);
 
+  /* process audio data */
   int16_t max_signal = INT16_MIN;
   int16_t min_signal = INT16_MAX;
 
@@ -449,9 +480,7 @@ void APP_main() {
   }
 
 
-  if (max_signal - min_signal > 200) {
-
-
+  if (max_signal - min_signal > 200 && !blink_counter) {
     // Calculate cross-correlation
     int32_t max_correlation = 0;
     int16_t time_delay = 0;
@@ -475,17 +504,103 @@ void APP_main() {
 
     }
 
-
-    float avg_alpha = 0.9;
+    float avg_alpha = 0.85;
     time_delay_avg = avg_alpha * (float)time_delay + (1 - avg_alpha) * time_delay_avg;
-
 
     char str[128];
     sprintf(str, "Max: %d, Min: %d, Time delay: %.2f\n", max_signal, min_signal, time_delay_avg);
     HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
+
+    last_detected_sound = 100;
   }
 
-  time_delay_avg *= 0.999f;
+  if (last_detected_sound > 0) {
+    last_detected_sound -= 1;
+  }
+  else {
+    time_delay_avg *= 0.95f;
+  }
+
+
+  /* animation state machine */
+  float guesture = states[10];
+
+  if (guesture == -1.f || guesture == 0.f) {  // no guesture detected
+    acs[0] = states[0];
+    acs[1] = states[1];
+    acs[3] = states[3];
+    acs[4] = states[4];
+    acs[5] = states[5];
+    acs[6] = states[6];
+    if (guesture == 0.f) {
+      acs[7] = 1.f;
+      acs[8] = 1.f;
+    }
+    else {
+      acs[7] = states[7];
+      acs[8] = states[8];
+    }
+    acs[9] = states[9];
+    acs[2] = time_delay_avg * 0.3f;
+  }
+  else if (guesture == 1.f) {  // ok
+    if (!animation_type) {
+      animation_type = 1;
+      animation_counter = 100;
+    }
+  }
+  else if (guesture == 2.f) {  // open ("hi")
+    acs[0] = 0.8f;
+    acs[1] = -0.4f;
+    acs[7] = 1.f;
+    acs[8] = 1.f;
+
+    acs[9] = 1.f;  // enlarged eyes
+  }
+  else if (guesture == 3.f) {  // close
+    acs[7] = 0.f;  // closed eyes
+    acs[8] = 0.f;  // closed eyes
+    acs[9] = 0.f;
+  }
+  else if (guesture == 4.f) {  // point
+    acs[7] = 0.f;  // wink
+    acs[8] = 1.f;  //
+    acs[9] = 0.f;
+  }
+  else if (guesture == 5.f) {  // heart
+    acs[2] = time_delay_avg * 0.3f;
+    acs[7] = 1.f;
+    acs[8] = 1.f;
+    acs[9] = 2.f;
+  }
+
+  if (animation_type == 1) {
+    animation_counter -= 1;
+
+    if (animation_counter > 50) {
+      acs[1] = 1.f;
+    }
+    else {
+      acs[1] = 0.f;
+    }
+
+    if (animation_counter == 0) {
+      animation_type = 0;
+      states[10] = 0;
+    }
+  }
+
+
+  if (random() % 1000 < 2) {
+    blink_counter = 10;
+  }
+
+  if (blink_counter) {
+    acs[7] = 0.f;  // blink
+    acs[8] = 0.f;  //
+    blink_counter -= 1;
+  }
+
 
 
 
@@ -493,7 +608,7 @@ void APP_main() {
 
   debug_counter += 1;
 
-  if (debug_counter >= 10) {
+  if (debug_counter >= 50) {
     char str[128];
     sprintf(str, "states: %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f\n",
         states[0], states[1], states[2],

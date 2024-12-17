@@ -31,7 +31,8 @@
     ".section \".text\"\n")                   /* Restore section */
 
 
-#define N_STATES    9
+#define N_STATES    11
+#define N_ACTIONS   10
 
 
 
