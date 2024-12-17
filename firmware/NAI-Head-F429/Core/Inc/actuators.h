@@ -19,10 +19,10 @@
 
 
 
-#define EYELID_L_FULLOPEN         1750
+#define EYELID_L_FULLOPEN         1675
 #define EYELID_R_FULLOPEN         1250
-#define EYELID_L_FULLCLOSE        1280
-#define EYELID_R_FULLCLOSE        1720
+#define EYELID_L_FULLCLOSE        1250
+#define EYELID_R_FULLCLOSE        1660
 
 
 typedef struct {

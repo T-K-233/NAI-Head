@@ -480,7 +480,7 @@ void APP_main() {
   }
 
 
-  if (max_signal - min_signal > 200 && !blink_counter) {
+  if (max_signal - min_signal > 400 && !blink_counter) {
     // Calculate cross-correlation
     int32_t max_correlation = 0;
     int16_t time_delay = 0;
@@ -504,7 +504,7 @@ void APP_main() {
 
     }
 
-    float avg_alpha = 0.85;
+    float avg_alpha = 0.75;
     time_delay_avg = avg_alpha * (float)time_delay + (1 - avg_alpha) * time_delay_avg;
 
     char str[128];
