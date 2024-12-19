@@ -1,3 +1,12 @@
 [submodule "hand-gesture-recognition-mediapipe"]
 	path = hand-gesture-recognition-mediapipe
 	url = https://github.com/kinivi/hand-gesture-recognition-mediapipe.git
+[submodule "Baremetal-IDE"]
+	path = Baremetal-IDE
+	url = git@github.com:ucb-bar/Baremetal-IDE.git
+[submodule "Baremetal-NN"]
+	path = Baremetal-NN
+	url = git@github.com:ucb-bar/Baremetal-NN.git
+[submodule "MaDa"]
+	path = MaDa
+	url = git@github.com:ucb-bar/MaDa.git
