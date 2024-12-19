@@ -81,7 +81,7 @@ with mp_hands.Hands(
 
     print("Camera started")
     while cap.isOpened():
-        print("Reading frame")
+        # print("Reading frame")
         success, image = cap.read()
         if not success:
             print("Ignoring empty camera frame.")
@@ -97,6 +97,7 @@ with mp_hands.Hands(
         # Draw the hand annotations on the image.
         image.flags.writeable = True
         image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+        label_ind = 0
         if results.multi_hand_landmarks:
             landmark_list = calc_landmark_list(image, results.multi_hand_landmarks[0])
             # print(results.multi_hand_landmarks)
@@ -104,7 +105,7 @@ with mp_hands.Hands(
                             landmark_list)
             features = torch.tensor(pre_processed_landmark_list).unsqueeze(0)
             outputs = gesture_model(features)
-            label_ind = torch.argmax(outputs).item()
+            label_ind = torch.argmax(outputs).item() + 1
             for hand_landmarks in results.multi_hand_landmarks:
                 mp_drawing.draw_landmarks(
                 image,
@@ -112,6 +113,8 @@ with mp_hands.Hands(
                 mp_hands.HAND_CONNECTIONS,
                 mp_drawing_styles.get_default_hand_landmarks_style(),
                 mp_drawing_styles.get_default_hand_connections_style())
+
+        print(label_ind)
 
         states[10] = label_ind
         sock.sendto(states.tobytes(), (ADDR, PORT))

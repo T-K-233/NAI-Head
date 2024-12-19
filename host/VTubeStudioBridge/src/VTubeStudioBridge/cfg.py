@@ -11,4 +11,4 @@ class VTubeStudioBridgeCfg:
     # store token in user home directory
     token_path = os.path.join(os.path.expanduser("~"), ".vts_token")
     
-    url = "ws://10.0.0.2:8001"
+    url = "ws://localhost:8001"

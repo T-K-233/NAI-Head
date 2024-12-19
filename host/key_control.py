@@ -20,7 +20,7 @@ states[8] = 1.0
 states[9] = 0.0
 
 # gesture
-states[10] = 0.0
+states[10] = 3
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 

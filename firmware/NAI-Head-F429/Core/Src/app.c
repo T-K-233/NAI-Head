@@ -541,7 +541,12 @@ void APP_main() {
       acs[8] = states[8];
     }
     acs[9] = states[9];
-    acs[2] = time_delay_avg * 0.3f;
+    if (guesture == 0.f) {
+      acs[2] = time_delay_avg * 0.3f;
+    }
+    else {
+      acs[2] = states[2];
+    }
   }
   else if (guesture == 1.f) {  // ok
     if (!animation_type) {
@@ -591,7 +596,7 @@ void APP_main() {
   }
 
 
-  if (random() % 1000 < 2) {
+  if (random() % 1000 < 1) {
     blink_counter = 10;
   }
 
