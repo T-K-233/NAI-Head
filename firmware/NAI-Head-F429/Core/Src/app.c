@@ -71,6 +71,19 @@ ActuatorControl actuators;
  * state[10]: gesture
  */
 float states[N_STATES];
+
+/**
+ * action[0]: EyeLeftX
+ * action[1]: EyeLeftY
+ * action[2]: EyeRightX
+ * action[3]: EyeRightY
+ * action[4]: EyeOpenLeft
+ * action[5]: EyeOpenRight
+ * action[6]: EyebrowLeftX
+ * action[7]: EyebrowRightX
+ * action[8]: Iris Change
+ * action[9]: Reserved
+ */
 float acs[N_ACTIONS];
 
 
@@ -98,26 +111,21 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
   if (htim == &htim6) {
-//    HAL_GPIO_WritePin(GPIOE, GPIO_PIN_0, 1);  // debug
-//    HAL_GPIO_WritePin(GPIOE, GPIO_PIN_0, 0);  // debug
-//    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, 1);  // debug
-//    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, 0);  // debug
+    int16_t eye_l_x_pixels = (int16_t)(-acs[0] * EYE_MOVEMENT_X_SCALE);
+    int16_t eye_l_y_pixels = (int16_t)(-acs[1] * EYE_MOVEMENT_Y_SCALE);
 
-    int16_t eye_l_x_pixels = (int16_t)(-acs[3] * EYE_MOVEMENT_X_SCALE);
-    int16_t eye_l_y_pixels = (int16_t)(-acs[4] * EYE_MOVEMENT_Y_SCALE);
-
-    int16_t eye_r_x_pixels = (int16_t)(-acs[5] * EYE_MOVEMENT_X_SCALE);
-    int16_t eye_r_y_pixels = (int16_t)(-acs[6] * EYE_MOVEMENT_Y_SCALE);
+    int16_t eye_r_x_pixels = (int16_t)(-acs[2] * EYE_MOVEMENT_X_SCALE);
+    int16_t eye_r_y_pixels = (int16_t)(-acs[3] * EYE_MOVEMENT_Y_SCALE);
 
     uint16_t *iris_img_data;
-    if (acs[9] == 1.f) {
+    if (acs[8] == 1.f) {
       iris_img_data = (uint16_t *)iris_large_data;
       eye_l_x_pixels /= 2;
       eye_l_y_pixels /= 2;
       eye_r_x_pixels /= 2;
       eye_r_y_pixels /= 2;
     }
-    else if (acs[9] == 2.f) {
+    else if (acs[8] == 2.f) {
       iris_img_data = (uint16_t *)iris_heart_data;
     }
     else {
@@ -128,17 +136,14 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
     GC9A01A_draw_pixels(&tft1, eye_l_x_pixels, eye_l_y_pixels, iris_img_data, 240, 240);
     // right eye
     GC9A01A_draw_pixels(&tft2, eye_r_x_pixels, eye_r_y_pixels, iris_img_data, 240, 240);
-
   }
   else if (htim == &htim7) {
-    robot_set_neck_roll_pitch_yaw(&actuators, acs[0], acs[1], acs[2]);
-    robot_set_eyelid(&actuators, acs[7], acs[8]);
-
+    robot_set_eyelid(&actuators, acs[4], acs[5]);
+    robot_set_eyebrow(&actuators, acs[6], acs[7]);
   }
 }
 
 void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi) {
-
   if (hspi == &hspi4) {
     HAL_GPIO_WritePin(GPIO_SPI4_CS_GPIO_Port, GPIO_SPI4_CS_Pin, 1);
   }
@@ -310,35 +315,6 @@ void UDP_multicast_init() {
 
 
 void APP_init() {
-
-  uint8_t counter = 0;
-
-  uint32_t filter_id = 0;
-  uint32_t filter_mask = 0x0;
-
-  CAN_FilterTypeDef filter_config;
-  filter_config.FilterBank = 0;
-  filter_config.FilterMode = CAN_FILTERMODE_IDMASK;
-  filter_config.FilterFIFOAssignment = CAN_FILTER_FIFO0;
-  filter_config.FilterIdHigh = filter_id << 5;
-  filter_config.FilterIdLow = 0;
-  filter_config.FilterMaskIdHigh = filter_mask << 5;
-  filter_config.FilterMaskIdLow = 0;
-  filter_config.FilterScale = CAN_FILTERSCALE_32BIT;
-  filter_config.FilterActivation = CAN_FILTER_ENABLE;
-  filter_config.SlaveStartFilterBank = 14;
-
-  HAL_CAN_ConfigFilter(&hcan1, &filter_config);
-//
-//  if (HAL_CAN_Start(&hcan1) != HAL_OK) {
-//    while (1)
-//    HAL_UART_Transmit(&huart3, (uint8_t *) "CAN init Error\r\n", strlen("CAN init Error\r\n"), 100);
-//  }
-//
-//  HAL_Delay(2000);
-
-
-
   ETH_MACFilterConfigTypeDef filterConfig = {0};
   filterConfig.PromiscuousMode = ENABLE;
   filterConfig.PassAllMulticast = ENABLE;
@@ -352,7 +328,7 @@ void APP_init() {
   igmp_init();
 
   robot_actuator_init(&actuators,
-      &htim1, TIM_CHANNEL_1, TIM_CHANNEL_2, TIM_CHANNEL_3,
+      &htim1, TIM_CHANNEL_1, TIM_CHANNEL_2,
       &htim4, TIM_CHANNEL_3, TIM_CHANNEL_4
     );
 
@@ -379,148 +355,19 @@ void APP_init() {
   UDP_init_transmit();
 //  UDP_multicast_init();
 
-  acs[7] = 0.5f;
-  acs[8] = 0.5f;
+  acs[4] = 0.5f;
+  acs[5] = 0.5f;
+  acs[6] = -0.8f;
+  acs[7] = -0.8f;
 }
 
 void APP_main() {
-  // CAN TX
-  uint32_t tx_mailbox;
-
-  CAN_TxHeaderTypeDef tx_header;
-  tx_header.DLC = 4;
-  tx_header.IDE = CAN_ID_STD;
-  tx_header.RTR = CAN_RTR_DATA;
-  tx_header.StdId = 0x00A;
-  tx_header.TransmitGlobalTime = DISABLE;
-
-  uint8_t tx_data[8];
-  tx_data[0] = counter;
-  tx_data[1] = 0x07;
-  tx_data[2] = 0x08;
-  tx_data[3] = 0x09;
-
-
-
-
-//  if (HAL_CAN_AddTxMessage(&hcan1, &tx_header, tx_data, &tx_mailbox) != HAL_OK) {
-//    HAL_UART_Transmit(&huart3, (uint8_t *) "CAN TX Error\r\n", strlen("CAN TX Error\r\n"), 100);
-//  }
-
-//  HAL_Delay(1);
-
-  // CAN RX
-//  uint32_t rx_fifo_level = HAL_CAN_GetRxFifoFillLevel(&hcan1, CAN_RX_FIFO0) || HAL_CAN_GetRxFifoFillLevel(&hcan1, CAN_RX_FIFO1);
-
-//  char rx_level_str[50];
-//  sprintf(rx_level_str, "level: %d\r\n", rx_fifo_level);
-//  HAL_UART_Transmit(&huart3, (uint8_t *)rx_level_str, strlen(rx_level_str), 100);
-//
-//  if (rx_fifo_level > 0) {
-//    HAL_UART_Transmit(&huart3, (uint8_t *)"CAN msg pending\r\n", strlen("CAN msg pending\r\n"), 100);
-//
-//    CAN_RxHeaderTypeDef rx_header;
-//    uint8_t rx_data[8];
-//
-//    HAL_CAN_GetRxMessage(&hcan1, CAN_RX_FIFO0, &rx_header, rx_data);
-//
-//    char rx_data_str[32];
-//    sprintf(rx_data_str, "receive data: %d\r\n", rx_data[0]);
-//    HAL_UART_Transmit(&huart3, (uint8_t *)rx_data_str, strlen(rx_data_str), 100);
-//  }
-
-//  HAL_Delay(100);
-
-
-
   /* receive UDP packet */
   ethernetif_input(&gnetif);
   sys_check_timeouts();
 
   /* transmit UDP packet */
   UDP_transmit();
-
-
-  /* perform audio recognition */
-  HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc_data_buffer_1, ADC_SAMPLES);
-  HAL_ADC_Start_DMA(&hadc2, (uint32_t *)adc_data_buffer_2, ADC_SAMPLES);
-  HAL_TIM_Base_Start(&htim2);
-
-  while (!completed) {
-    HAL_Delay(1);
-  }
-  completed = 0;
-  HAL_TIM_Base_Stop(&htim2);
-
-  /* process audio data */
-  int16_t max_signal = INT16_MIN;
-  int16_t min_signal = INT16_MAX;
-
-  uint32_t sum_1 = 0;
-  uint32_t sum_2 = 0;
-
-  for (size_t i=0; i<ADC_SAMPLES; i+=1) {
-    sum_1 += adc_data_buffer_1[i];
-    sum_2 += adc_data_buffer_2[i];
-  }
-
-  uint16_t mean_1 = sum_1 / ADC_SAMPLES;
-  uint16_t mean_2 = sum_2 / ADC_SAMPLES;
-
-  for (size_t i=0; i<ADC_SAMPLES; i+=1) {
-    data_1[i] = adc_data_buffer_1[i] - mean_1;
-    data_2[i] = adc_data_buffer_2[i] - mean_2;
-
-    if (data_1[i] > max_signal) {
-      max_signal = data_1[i];
-    }
-    if (data_1[i] < min_signal) {
-      min_signal = data_1[i];
-    }
-  }
-
-
-  if (max_signal - min_signal > 400 && !blink_counter) {
-    // Calculate cross-correlation
-    int32_t max_correlation = 0;
-    int16_t time_delay = 0;
-
-    const int16_t max_shift = ADC_SAMPLES / 4;
-
-    for (int16_t shift = -max_shift; shift < max_shift; shift+=1) {
-      int32_t correlation = 0;
-
-      for (size_t i = 0; i < ADC_SAMPLES; i+=1) {
-        int32_t j = i + shift;
-        if (j >= 0 && j < ADC_SAMPLES) {
-          correlation += (int32_t)data_1[i] * (int32_t)data_2[j];
-        }
-      }
-
-      if (correlation > max_correlation) {
-        max_correlation = correlation;
-        time_delay = shift;
-      }
-
-    }
-
-    float avg_alpha = 0.75;
-    time_delay_avg = avg_alpha * (float)time_delay + (1 - avg_alpha) * time_delay_avg;
-
-    char str[128];
-    sprintf(str, "Max: %d, Min: %d, Time delay: %.2f\n", max_signal, min_signal, time_delay_avg);
-    HAL_UART_Transmit(&huart3, (uint8_t *)str, strlen(str), 100);
-
-    last_detected_sound = 100;
-  }
-
-  if (last_detected_sound > 0) {
-    last_detected_sound -= 1;
-  }
-  else {
-    time_delay_avg *= 0.95f;
-  }
-
 
   /* animation state machine */
   float guesture = states[10];
