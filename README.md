@@ -1,4 +1,7 @@
-# EE 249 Final Project
+# An animatronic head
+
+Note: The original code and report is stored on [ee249 branch](https://github.com/T-K-233/NAI-Head/tree/ee249).
+
 
 ![image](./docs/robot.jpg)
 
