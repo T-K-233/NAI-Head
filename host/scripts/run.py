@@ -2,12 +2,10 @@ import time
 import asyncio
 import struct
 
-import numpy as np
 import serial
 from cc.xboxcontroller import XboxController
 
 from common import create_vts_client
-
 
 
 async def main():
@@ -40,7 +38,6 @@ async def main():
         time.sleep(0.1)
 
 
-
 ser = serial.Serial("COM5", 115200)
 stick = XboxController(0, deadzone=0, dampen=1e-2)
 
@@ -65,10 +62,10 @@ state_5_filtered = 0
 
 while True:
     stick.update()
-    
+
     state["EyeLeftX"] = stick.get_left_x()
     state["EyeLeftY"] = stick.get_left_y()
-    
+
     state["EyeRightX"] = stick.get_right_x()
     state["EyeRightY"] = stick.get_right_y()
 
@@ -82,12 +79,12 @@ while True:
         else:
             state["EyeOpenLeft"] = 1.
             state["EyeOpenRight"] = 1.
-    
+
     if stick.get_a_button():
         trigger_controlled = True
     if stick.get_b_button():
         trigger_controlled = False
-    
+
     if stick.get_left_bumper():
         synced_mode = True
     if stick.get_right_bumper():
@@ -97,7 +94,7 @@ while True:
         state["EyeRightX"] = state["EyeLeftX"]
         state["EyeRightY"] = state["EyeLeftY"]
         state["EyeOpenRight"] = state["EyeOpenLeft"]
-    
+
     filter_alpha = 0.8
     state_0_filtered = filter_alpha * state["EyeOpenLeft"] + (1 - filter_alpha) * state_0_filtered
     state_1_filtered = filter_alpha * state["EyeOpenRight"] + (1 - filter_alpha) * state_1_filtered
@@ -152,7 +149,7 @@ while True:
     # buf = ser.read_all()
     # if buf:
     #     print(buf)
-    
+
 
 
     time.sleep(.1)
