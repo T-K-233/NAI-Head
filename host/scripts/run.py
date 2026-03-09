@@ -1,162 +1,141 @@
-import time
 import asyncio
-import struct
+import socket
+from typing import Dict
 
-import serial
-from cc.xboxcontroller import XboxController
+import numpy as np
 
+from loop_rate_limiters import RateLimiter
 from common import create_vts_client
+
+
+class UDPMessageIndex:
+    FACE_ANGLE_X = 1
+    FACE_ANGLE_Y = 2
+    FACE_ANGLE_Z = 3
+    BROW_HEIGHT_LEFT = 4
+    BROW_HEIGHT_RIGHT = 5
+    EYE_OPEN_LEFT = 6
+    EYE_OPEN_RIGHT = 7
+    EYE_LEFT_X = 8
+    EYE_LEFT_Y = 9
+    EYE_RIGHT_X = 10
+    EYE_RIGHT_Y = 11
+
+
+NUM_MESSAGE_FIELDS = 12
+
+# Device IP (unicast). Must match firmware, e.g. 172.28.0.64
+ADDR = "172.28.0.64"
+PORT = 7000
+
+
+def _clamp_to_unit(value: float) -> float:
+    return max(-1.0, min(1.0, value))
+
+
+def _normalize_angle_45_deg_range(value_deg: float) -> float:
+    """Map angle in [-45, 45] degrees to [-1, 1]."""
+    return _clamp_to_unit(value_deg / 45.0)
+
+
+def _normalize_unit_0_1(value: float) -> float:
+    """Map [0, 1] to [-1, 1]."""
+    return _clamp_to_unit(2.0 * value - 1.0)
+
+
+def _build_udp_message(params: Dict[str, float]) -> np.ndarray:
+    """
+    Build normalized UDP message from Live2D parameters.
+
+    Expected keys in `params` (from Live2D):
+      - "ParamAngleX", "ParamAngleY", "ParamAngleZ"
+      - "ParamBrowLY", "ParamBrowRY"
+      - "ParamEyeLOpen", "ParamEyeROpen"
+      - "ParamEyeBallX", "ParamEyeBallY"
+    """
+    message = np.zeros(NUM_MESSAGE_FIELDS, dtype=np.float32)
+
+    # Angles: -45 (left/down/tilt-left) to +45 (right/up/tilt-right)
+    face_angle_x = params["ParamAngleX"]
+    face_angle_y = params["ParamAngleY"]
+    face_angle_z = params["ParamAngleZ"]
+
+    message[UDPMessageIndex.FACE_ANGLE_X] = _normalize_angle_45_deg_range(face_angle_x)
+    message[UDPMessageIndex.FACE_ANGLE_Y] = _normalize_angle_45_deg_range(face_angle_y)
+    message[UDPMessageIndex.FACE_ANGLE_Z] = _normalize_angle_45_deg_range(face_angle_z)
+
+    # Brows: 0 (down) to 1 (up) -> [-1, 1]
+    brow_height_left = params["ParamBrowLY"]
+    brow_height_right = params["ParamBrowRY"]
+
+    message[UDPMessageIndex.BROW_HEIGHT_LEFT] = _normalize_unit_0_1(brow_height_left)
+    message[UDPMessageIndex.BROW_HEIGHT_RIGHT] = _normalize_unit_0_1(brow_height_right)
+
+    # Eye open: 0 (closed) to 1 (open) -> [-1, 1]
+    eye_open_left = params["ParamEyeLOpen"]
+    eye_open_right = params["ParamEyeROpen"]
+
+    message[UDPMessageIndex.EYE_OPEN_LEFT] = _normalize_unit_0_1(eye_open_left)
+    message[UDPMessageIndex.EYE_OPEN_RIGHT] = _normalize_unit_0_1(eye_open_right)
+
+    # Eye ball positions: already in [-1, 1], just clamp
+    eye_x = params["ParamEyeBallX"]
+    eye_y = params["ParamEyeBallY"]
+
+    # Use same underlying value for both eyes, as in test_get_live2d_parameters.py
+    message[UDPMessageIndex.EYE_LEFT_X] = _clamp_to_unit(eye_x)
+    message[UDPMessageIndex.EYE_LEFT_Y] = _clamp_to_unit(eye_y)
+    message[UDPMessageIndex.EYE_RIGHT_X] = _clamp_to_unit(eye_x)
+    message[UDPMessageIndex.EYE_RIGHT_Y] = _clamp_to_unit(eye_y)
+
+    return message
 
 
 async def main():
     vts = await create_vts_client()
 
-    while True:
-        response = await vts.request(
-            vts.vts_request.requestTrackingParameterList()
-        )
-        parameters = {}
-        for parameter in response["data"]["defaultParameters"]:
-            parameters[parameter["name"]] = parameter["value"]
+    # Direct UDP socket (unicast)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-        face_angle_x = parameters["FaceAngleX"]
-        face_angle_y = parameters["FaceAngleY"]
-        face_angle_z = parameters["FaceAngleZ"]
-        brows = parameters["Brows"]
-        eye_open_left = parameters["EyeOpenLeft"]
-        eye_open_right = parameters["EyeOpenRight"]
-        eye_left_x = parameters["EyeLeftX"]
-        eye_left_y = parameters["EyeLeftY"]
-        eye_right_x = parameters["EyeRightX"]
-        eye_right_y = parameters["EyeRightY"]
+    rate = RateLimiter(frequency=30.0)
 
-        print(f"Face angle: {face_angle_x:.2f}, {face_angle_y:.2f}, {face_angle_z:.2f}")
-        print(f"Brows: {brows:.2f}")
-        print(f"Eye open: {eye_open_left:.2f}, {eye_open_right:.2f}")
-        print(f"Eye position: {eye_left_x:.2f}, {eye_left_y:.2f}, {eye_right_x:.2f}, {eye_right_y:.2f}")
-        print("--------------------------------")
-        time.sleep(0.1)
+    try:
+        while True:
+            response = await vts.request(
+                vts.vts_request.BaseRequest("Live2DParameterListRequest")
+            )
 
+            parameters: Dict[str, float] = {}
+            for parameter in response["data"]["parameters"]:
+                parameters[parameter["name"]] = parameter["value"]
 
-ser = serial.Serial("COM5", 115200)
-stick = XboxController(0, deadzone=0, dampen=1e-2)
+            # Debug print of raw parameters (optional)
+            face_angle_x = parameters["ParamAngleX"]
+            face_angle_y = parameters["ParamAngleY"]
+            face_angle_z = parameters["ParamAngleZ"]
+            brow_height_left = parameters["ParamBrowLY"]
+            brow_height_right = parameters["ParamBrowRY"]
+            eye_open_left = parameters["ParamEyeLOpen"]
+            eye_open_right = parameters["ParamEyeROpen"]
+            eye_left_x = parameters["ParamEyeBallX"]
+            eye_left_y = parameters["ParamEyeBallY"]
+            eye_right_x = parameters["ParamEyeBallX"]
+            eye_right_y = parameters["ParamEyeBallY"]
 
-state = {
-    "EyeOpenLeft": 1.,
-    "EyeOpenRight": 1.,
-    "EyeLeftX": 0.,
-    "EyeLeftY": 0.,
-    "EyeRightX": 0.,
-    "EyeRightY": 0.,
-}
+            print(
+                f"Face=({face_angle_x:.1f}, {face_angle_y:.1f}, {face_angle_z:.1f}) "
+                f"Brows=({brow_height_left:.1f}, {brow_height_right:.1f}) "
+                f"EyeOpen=({eye_open_left:.1f}, {eye_open_right:.1f}) "
+                f"EyePosition=({eye_left_x:.1f}, {eye_left_y:.1f}, {eye_right_x:.1f}, {eye_right_y:.1f})"
+            )
 
-trigger_controlled = True
-synced_mode = True
+            # Build and send normalized UDP message
+            message = _build_udp_message(parameters)
+            sock.sendto(message.tobytes(), (ADDR, PORT))
 
-state_0_filtered = 0
-state_1_filtered = 0
-state_2_filtered = 0
-state_3_filtered = 0
-state_4_filtered = 0
-state_5_filtered = 0
-
-while True:
-    stick.update()
-
-    state["EyeLeftX"] = stick.get_left_x()
-    state["EyeLeftY"] = stick.get_left_y()
-
-    state["EyeRightX"] = stick.get_right_x()
-    state["EyeRightY"] = stick.get_right_y()
-
-    if trigger_controlled:
-        state["EyeOpenLeft"] = 1 - stick.get_left_trigger()
-        state["EyeOpenRight"] = 1 - stick.get_right_trigger()
-    else:
-        if stick.get_x_button():
-            state["EyeOpenLeft"] = 0.
-            state["EyeOpenRight"] = 0.
-        else:
-            state["EyeOpenLeft"] = 1.
-            state["EyeOpenRight"] = 1.
-
-    if stick.get_a_button():
-        trigger_controlled = True
-    if stick.get_b_button():
-        trigger_controlled = False
-
-    if stick.get_left_bumper():
-        synced_mode = True
-    if stick.get_right_bumper():
-        synced_mode = False
-
-    if synced_mode:
-        state["EyeRightX"] = state["EyeLeftX"]
-        state["EyeRightY"] = state["EyeLeftY"]
-        state["EyeOpenRight"] = state["EyeOpenLeft"]
-
-    filter_alpha = 0.8
-    state_0_filtered = filter_alpha * state["EyeOpenLeft"] + (1 - filter_alpha) * state_0_filtered
-    state_1_filtered = filter_alpha * state["EyeOpenRight"] + (1 - filter_alpha) * state_1_filtered
-    state_2_filtered = filter_alpha * state["EyeLeftX"] + (1 - filter_alpha) * state_2_filtered
-    state_3_filtered = filter_alpha * state["EyeLeftY"] + (1 - filter_alpha) * state_3_filtered
-    state_4_filtered = filter_alpha * state["EyeRightX"] + (1 - filter_alpha) * state_4_filtered
-    state_5_filtered = filter_alpha * state["EyeRightY"] + (1 - filter_alpha) * state_5_filtered
-
-    ser_buffer = struct.pack("<ffffff", state_0_filtered, state_1_filtered, state_2_filtered, state_3_filtered, state_4_filtered, state_5_filtered)
-    ser.write(ser_buffer)
-    ser.flush()
-
-    payload = {
-        "apiName": "VTubeStudioPublicAPI",
-        "apiVersion": "1.0",
-        "requestID": "SomeID",
-        "messageType": "InjectParameterDataRequest",
-        "data": {
-            "faceFound": False,
-            "mode": "set",
-            "parameterValues": [
-                {
-                    "id": InputParameters.EyeLeftX,
-                    "value": state["EyeLeftX"]
-                },
-                {
-                    "id": InputParameters.EyeLeftY,
-                    "value": state["EyeLeftY"]
-                },
-                {
-                    "id": InputParameters.EyeRightX,
-                    "value": state["EyeRightX"]
-                },
-                {
-                    "id": InputParameters.EyeRightY,
-                    "value": state["EyeRightY"]
-                },
-                {
-                    "id": InputParameters.EyeOpenLeft,
-                    "value": state["EyeOpenLeft"]
-                },
-                {
-                    "id": InputParameters.EyeOpenRight,
-                    "value": state["EyeOpenRight"]
-                }
-            ]
-        }
-    }
-    client.send(payload)
-
-
-    # buf = ser.read_all()
-    # if buf:
-    #     print(buf)
-
-
-
-    time.sleep(.1)
-
-
-client.websocket.close()
-
+            rate.sleep()
+    finally:
+        sock.close()
 
 if __name__ == "__main__":
     asyncio.run(main())

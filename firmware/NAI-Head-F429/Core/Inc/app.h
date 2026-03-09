@@ -31,11 +31,7 @@
     ".section \".text\"\n")                   /* Restore section */
 
 
-#define N_STATES    11
-#define N_ACTIONS   10
-
-
-
+#define N_COMMANDS                20
 
 #define EYE_MOVEMENT_X_SCALE      30.f
 #define EYE_MOVEMENT_Y_SCALE      30.f
