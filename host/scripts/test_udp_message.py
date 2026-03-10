@@ -3,7 +3,8 @@ import socket
 import numpy as np
 
 # Device IP (unicast). Must match firmware, e.g. 172.28.0.64
-ADDR = "172.28.0.64"
+# ADDR = "172.28.0.64"
+ADDR = "172.28.0.255"
 PORT = 7000
 
 
@@ -25,8 +26,13 @@ NUM_MESSAGE_FIELDS = 12
 
 message = np.zeros(NUM_MESSAGE_FIELDS, dtype=np.float32)
 
-message[UDPMessageIndex.EYE_OPEN_LEFT] = 1.0
-message[UDPMessageIndex.EYE_OPEN_RIGHT] = 1.0
+eyes = 0
+
+# message[UDPMessageIndex.FACE_ANGLE_X] = 0.2
+message[UDPMessageIndex.FACE_ANGLE_Y] = 0.2
+
+message[UDPMessageIndex.EYE_OPEN_LEFT] = eyes
+message[UDPMessageIndex.EYE_OPEN_RIGHT] = eyes
 
 message[UDPMessageIndex.BROW_HEIGHT_LEFT] = 0.0
 message[UDPMessageIndex.BROW_HEIGHT_RIGHT] = 0.0

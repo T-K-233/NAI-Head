@@ -25,7 +25,9 @@ class UDPMessageIndex:
 NUM_MESSAGE_FIELDS = 12
 
 # Device IP (unicast). Must match firmware, e.g. 172.28.0.64
-ADDR = "172.28.0.64"
+# ADDR = "172.28.0.64"
+# broadcast to all devices on the network
+ADDR = "172.28.0.255"
 PORT = 7000
 
 
